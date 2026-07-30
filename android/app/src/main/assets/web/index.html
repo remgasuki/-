@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>大乐透数据分析模型</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/chart.min.js"></script>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="icon">🎱</span>
+        <span>大乐透分析</span>
+    </div>
+    <div class="navbar-type">
+        <button class="type-btn active" data-type="dlt" onclick="switchLotteryType('dlt')">大乐透</button>
+        <button class="type-btn" data-type="ssq" onclick="switchLotteryType('ssq')">双色球</button>
+    </div>
+    <div class="navbar-info">
+        <span id="data-count">加载中...</span>
+    </div>
+</nav>
+
+<div class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard">📊 仪表盘</button>
+    <button class="tab-btn" data-tab="data">📋 数据</button>
+    <button class="tab-btn" data-tab="frequency">🔢 频率</button>
+    <button class="tab-btn" data-tab="statistics">📈 统计</button>
+    <button class="tab-btn" data-tab="predict">🔮 预测</button>
+    <button class="tab-btn" data-tab="scanner">📷 扫描验奖</button>
+    <button class="tab-btn" data-tab="export">📥 导出</button>
+</div>
+
+<div class="content">
+
+    <!-- 仪表盘 -->
+    <div class="tab-panel active" id="tab-dashboard">
+        <div class="stat-grid" id="dashboard-stats"></div>
+        <div class="card">
+            <div class="card-title">📊 前区号码频率</div>
+            <div class="chart-container"><canvas id="chart-front-freq"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📊 后区号码频率</div>
+            <div class="chart-container"><canvas id="chart-back-freq"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📈 最近50期前区和值趋势</div>
+            <div class="chart-container"><canvas id="chart-sum-trend"></canvas></div>
+        </div>
+    </div>
+
+    <!-- 数据管理 -->
+    <div class="tab-panel" id="tab-data">
+        <div class="btn-group">
+            <button class="btn btn-outline" onclick="loadDataList()">🔄 刷新</button>
+            <button class="btn btn-outline" onclick="fetchRealData()" style="font-size:11px;">🔄 获取最新数据</button>
+        </div>
+        <div class="card">
+            <div class="card-title">📋 历史开奖数据</div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>期号</th><th>日期</th><th>前区</th><th>后区</th><th>前和</th><th>后和</th></tr>
+                    </thead>
+                    <tbody id="data-table-body"></tbody>
+                </table>
+            </div>
+            <div class="pagination" id="data-pagination"></div>
+        </div>
+    </div>
+
+    <!-- 频率分析 -->
+    <div class="tab-panel" id="tab-frequency">
+        <div class="card">
+            <div class="card-title">🔥 前区号码热力图</div>
+            <div class="chart-container"><canvas id="chart-front-heat"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">🔥 后区号码热力图</div>
+            <div class="chart-container"><canvas id="chart-back-heat"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">❄️ 遗漏分析 - 前区</div>
+            <div class="chart-container"><canvas id="chart-front-missing"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">❄️ 遗漏分析 - 后区</div>
+            <div class="chart-container"><canvas id="chart-back-missing"></canvas></div>
+        </div>
+        <div class="card" id="hot-cold-card"></div>
+    </div>
+
+    <!-- 统计分析 -->
+    <div class="tab-panel" id="tab-statistics">
+        <div class="card">
+            <div class="card-title">🔢 前区奇偶比分布</div>
+            <div class="chart-container"><canvas id="chart-odd-even-front"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">🔢 后区奇偶比分布</div>
+            <div class="chart-container"><canvas id="chart-odd-even-back"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📏 前区大小比分布</div>
+            <div class="chart-container"><canvas id="chart-big-small-front"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📏 后区大小比分布</div>
+            <div class="chart-container"><canvas id="chart-big-small-back"></canvas></div>
+        </div>
+        <div class="card">
+            <div class="card-title">🗂️ 前区区间分布</div>
+            <div class="chart-container"><canvas id="chart-zone"></canvas></div>
+        </div>
+        <div class="card" id="consecutive-card"></div>
+    </div>
+
+    <!-- 趋势预测 -->
+    <div class="tab-panel" id="tab-predict">
+        <div class="card">
+            <div class="card-title">🔮 综合预测（多算法融合）</div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="runPrediction()">🎯 开始预测</button>
+            </div>
+            <div id="prediction-results"></div>
+        </div>
+    </div>
+
+    <!-- 扫描验奖 -->
+    <div class="tab-panel" id="tab-scanner">
+        <div class="card">
+            <div class="card-title">📷 彩票扫描验奖</div>
+            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">使用摄像头扫描纸质彩票上的号码，自动与最新开奖数据比对</p>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="startScan()">📷 开始扫描</button>
+            </div>
+            <div id="scanner-result"></div>
+        </div>
+    </div>
+
+    <!-- 导出 -->
+    <div class="tab-panel" id="tab-export">
+        <div class="card">
+            <div class="card-title">📥 数据导出</div>
+            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">导出为JSON文件保存到本地</p>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="exportDataJSON()">📋 导出 JSON</button>
+                <button class="btn btn-warning" onclick="exportReport()">📝 导出分析报告</button>
+            </div>
+            <p id="export-status" style="margin-top:8px;font-size:12px;color:var(--text-secondary);"></p>
+        </div>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

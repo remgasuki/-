@@ -1,0 +1,14 @@
+// Top-level build file for 大乐透数据分析模型 Android App
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.5.0'
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

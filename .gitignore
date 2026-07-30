@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Android
+android/.gradle/
+android/app/build/
+android/local.properties
+android/jdk21/
+android/gradle-8.5-bin.zip
+android/jdk21.zip
+android/**/build/
+
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Data files (generated)
+*.json
+!package.json
+
+# Environment
+.env
+.env.local

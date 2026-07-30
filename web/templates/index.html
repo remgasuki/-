@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大乐透/双色球数据分析模型 v1.2</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="icon">🎱</span>
+        <span>大乐透数据分析模型</span>
+    </div>
+    <div class="navbar-type">
+        <button class="type-btn active" data-type="dlt" onclick="switchLotteryType('dlt')">大乐透</button>
+        <button class="type-btn" data-type="ssq" onclick="switchLotteryType('ssq')">双色球</button>
+    </div>
+    <div class="navbar-info">
+        <span id="data-count">加载中...</span>
+        <span id="data-range">---</span>
+    </div>
+</nav>
+
+<!-- 标签导航 -->
+<div class="tab-nav">
+    <button class="tab-btn active" data-tab="dashboard">📊 仪表盘</button>
+    <button class="tab-btn" data-tab="data">📋 数据管理</button>
+    <button class="tab-btn" data-tab="frequency">🔢 频率分析</button>
+    <button class="tab-btn" data-tab="statistics">📈 统计分析</button>
+    <button class="tab-btn" data-tab="predict">🔮 趋势预测</button>
+    <button class="tab-btn" data-tab="export">📥 数据导出</button>
+</div>
+
+<!-- 内容区 -->
+<div class="content">
+
+    <!-- ==================== 仪表盘 ==================== -->
+    <div class="tab-panel active" id="tab-dashboard">
+        <div class="stat-grid" id="dashboard-stats"></div>
+
+        <div class="card">
+            <div class="card-title">📊 号码频率分布</div>
+            <div class="chart-container">
+                <canvas id="chart-front-freq"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📊 号码频率分布</div>
+            <div class="chart-container">
+                <canvas id="chart-back-freq"></canvas>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📈 最近50期前区和值趋势</div>
+            <div class="chart-container">
+                <canvas id="chart-sum-trend"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== 数据管理 ==================== -->
+    <div class="tab-panel" id="tab-data">
+        <div class="btn-group">
+            <button class="btn btn-outline" onclick="refreshData()">🔄 刷新最新200期</button>
+        </div>
+
+        <div class="card">
+            <div class="card-title">📋 历史开奖数据</div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>期号</th>
+                            <th>开奖日期</th>
+                            <th>前区号码</th>
+                            <th>后区号码</th>
+                            <th>前区和值</th>
+                            <th>后区和值</th>
+                        </tr>
+                    </thead>
+                    <tbody id="data-table-body"></tbody>
+                </table>
+            </div>
+            <div class="pagination" id="data-pagination"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 频率分析 ==================== -->
+    <div class="tab-panel" id="tab-frequency">
+        <div class="chart-row">
+            <div class="card">
+                <div class="card-title">🔥 号码热力图</div>
+                <div class="chart-container">
+                    <canvas id="chart-front-heat"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">🔥 号码热力图</div>
+                <div class="chart-container">
+                    <canvas id="chart-back-heat"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-row">
+            <div class="card">
+                <div class="card-title">❄️ 遗漏分析</div>
+                <div class="chart-container">
+                    <canvas id="chart-front-missing"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">❄️ 遗漏分析</div>
+                <div class="chart-container">
+                    <canvas id="chart-back-missing"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="hot-cold-card"></div>
+    </div>
+
+    <!-- ==================== 统计分析 ==================== -->
+    <div class="tab-panel" id="tab-statistics">
+        <div class="chart-row">
+            <div class="card">
+                <div class="card-title">🔢 奇偶比分布</div>
+                <div class="chart-container">
+                    <canvas id="chart-odd-even-front"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">🔢 奇偶比分布</div>
+                <div class="chart-container">
+                    <canvas id="chart-odd-even-back"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-row">
+            <div class="card">
+                <div class="card-title">📏 大小比分布</div>
+                <div class="chart-container">
+                    <canvas id="chart-big-small-front"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title">📏 大小比分布</div>
+                <div class="chart-container">
+                    <canvas id="chart-big-small-back"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">🗂️ 区间分布</div>
+            <div class="chart-container">
+                <canvas id="chart-zone"></canvas>
+            </div>
+        </div>
+
+        <div class="card" id="consecutive-card"></div>
+    </div>
+
+    <!-- ==================== 趋势预测 ==================== -->
+    <div class="tab-panel" id="tab-predict">
+        <div class="card">
+            <div class="card-title">🔮 综合预测（多算法融合）</div>
+            <div class="btn-group">
+                <button class="btn btn-primary" onclick="runPrediction()">🎯 开始预测</button>
+            </div>
+            <div id="prediction-results"></div>
+        </div>
+    </div>
+
+    <!-- ==================== 数据导出 ==================== -->
+    <div class="tab-panel" id="tab-export">
+        <div class="card">
+            <div class="card-title">📥 数据导出</div>
+            <p style="margin-bottom: 16px; color: var(--text-secondary);">
+                选择导出格式，下载历史开奖数据或分析报告
+            </p>
+            <div class="btn-group">
+                <button class="btn btn-success" onclick="exportData('csv')">📄 导出 CSV</button>
+                <button class="btn btn-success" onclick="exportData('json')">📋 导出 JSON</button>
+                <button class="btn btn-success" onclick="exportData('excel')">📊 导出 Excel</button>
+                <button class="btn btn-warning" onclick="exportData('report')">📝 导出分析报告</button>
+            </div>
+            <p id="export-status" style="margin-top: 12px; font-size: 13px; color: var(--text-secondary);"></p>
+        </div>
+    </div>
+
+</div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
