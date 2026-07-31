@@ -320,7 +320,7 @@ def open_browser():
 
 def main():
     print("=" * 60)
-    print("  大乐透 / 双色球 数据分析模型 v1.3")
+    print("  大乐透 / 双色球 数据分析模型 v1.4")
     print("  Windows 桌面版 / Android 移动版")
     print("=" * 60)
     for lt in ["dlt", "ssq"]:

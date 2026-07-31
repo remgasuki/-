@@ -77,7 +77,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="大乐透数据分析模型",
+    name="lottery",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
