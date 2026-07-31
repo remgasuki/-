@@ -107,7 +107,8 @@ async function fetchRealData(count = 200) {
 async function fetchDLTData(count = 200) {
     const headers = {
         "Accept": "application/json",
-        "Referer": "https://static.sporttery.cn/"
+        "Referer": "https://static.sporttery.cn/",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     };
     const pageSize = Math.min(count, 100);
     const totalPages = Math.ceil(count / pageSize);
@@ -117,7 +118,13 @@ async function fetchDLTData(count = 200) {
     try {
         for (let page = 1; page <= totalPages; page++) {
             const url = `https://webapi.sporttery.cn/gateway/lottery/getHistoryPageListV1.qry?gameNo=${gameNo}&provinceId=0&pageSize=${pageSize}&isVerify=1&pageNo=${page}`;
-            const res = await fetch(url, { headers });
+            let res;
+            try {
+                res = await fetch(url, { headers });
+            } catch (fetchErr) {
+                // WebView fetch 可能在 SSL 证书问题时抛出异常，通过 Android 桥接回退
+                throw new Error("网络连接失败，请检查网络或尝试切换网络环境");
+            }
             if (!res.ok) throw new Error("HTTP " + res.status);
             const data = await res.json();
             const items = data.value && data.value.list;

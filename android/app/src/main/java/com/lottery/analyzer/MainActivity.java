@@ -2,14 +2,18 @@ package com.lottery.analyzer;
 
 import android.annotation.SuppressLint;
 import android.content.Intent;
+import android.net.http.SslError;
 import android.os.Bundle;
 import android.view.KeyEvent;
+import android.view.View;
 import android.webkit.JavascriptInterface;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -28,6 +32,13 @@ public class MainActivity extends AppCompatActivity {
 
         webView = findViewById(R.id.webview);
 
+        // 关于按钮
+        Button btnAbout = findViewById(R.id.btnAbout);
+        btnAbout.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, AboutActivity.class);
+            startActivity(intent);
+        });
+
         // 配置 WebView
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -41,6 +52,7 @@ public class MainActivity extends AppCompatActivity {
         settings.setBuiltInZoomControls(true);
         settings.setDisplayZoomControls(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setDefaultTextEncodingName("UTF-8");
 
         // 允许跨域请求（用于 Chart.js CDN）
         settings.setAllowUniversalAccessFromFileURLs(true);
@@ -49,6 +61,12 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return false;
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                // 忽略 SSL 证书错误，确保 API 请求（如 sporttery.cn）能正常访问
+                handler.proceed();
             }
         });
 

@@ -28,6 +28,7 @@ sys.path.insert(0, BASE_PATH)
 app = Flask(__name__,
             template_folder=os.path.join(BASE_PATH, "web", "templates"),
             static_folder=os.path.join(BASE_PATH, "web", "static"))
+app.config['JSON_AS_ASCII'] = False
 
 # 数据文件路径：开发模式用相对路径，打包后基于 exe 所在目录
 if getattr(sys, 'frozen', False):
