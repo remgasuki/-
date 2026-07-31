@@ -269,10 +269,34 @@ def api_predict_moving_avg():
 
 @app.route("/api/predict/comprehensive")
 def api_predict_comprehensive():
-    """综合预测（使用统计分析算法）"""
+    """综合预测（使用统计分析算法），支持多组预测"""
     lt = _get_lt()
     lookback = request.args.get("lookback", 50, type=int)
-    return jsonify(_predictors[lt].predict_by_statistics(lookback))
+    count = request.args.get("count", 1, type=int)
+    count = max(1, min(count, 10))  # 限制1-10组
+
+    # 不同权重策略，产生不同的预测结果
+    weight_strategies = [0.55, 0.45, 0.65, 0.35, 0.75, 0.40, 0.60, 0.50, 0.70, 0.30]
+    predictions = []
+    for i in range(count):
+        freq_weight = weight_strategies[i % len(weight_strategies)]
+        pred = _predictors[lt].predict_by_statistics(lookback, freq_weight)
+        predictions.append({
+            "front_pred": pred["front_pred"],
+            "back_pred": pred["back_pred"],
+            "reasons": pred["reasons"],
+            "method": pred["method"]
+        })
+
+    # 使用第一组的统计信息（所有组基于相同数据）
+    first_pred = _predictors[lt].predict_by_statistics(lookback, 0.55)
+    return jsonify({
+        "predictions": predictions,
+        "stats": first_pred.get("stats", {}),
+        "lottery_type": first_pred.get("lottery_type", lt),
+        "front_name": first_pred.get("front_name", ""),
+        "back_name": first_pred.get("back_name", ""),
+    })
 
 
 # ==================== 导出 API ====================

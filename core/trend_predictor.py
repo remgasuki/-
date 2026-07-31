@@ -16,7 +16,7 @@ class TrendPredictor:
 
     # ==================== 基于统计分析的确定性预测（无随机） ====================
 
-    def predict_by_statistics(self, lookback: int = 50) -> Dict:
+    def predict_by_statistics(self, lookback: int = 50, freq_weight: float = 0.55) -> Dict:
         """
         基于统计分析的多维度预测算法
         - 热号分析：统计所选期内各号码的出现频率，优先推荐高频号
@@ -24,6 +24,7 @@ class TrendPredictor:
         - 连号/重号趋势：分析所选期内连号的出现规律
         - 奇偶/大小分布：参考所选期内的奇偶比、大小比分布
         - 双色球和大乐透各自独立计算
+        - freq_weight: 频率权重(0.3~0.7)，不同权重产生不同预测结果
         """
         data = self.loader.get_recent(lookback)
         if len(data) < 10:
@@ -114,13 +115,14 @@ class TrendPredictor:
         best_back_big_small = sorted_bbs[0][0] if sorted_bbs else "0:0"
         target_back_big = int(best_back_big_small.split(":")[0])
 
-        # 6. 综合评分 (频率权重55% + 遗漏权重45%)
+        # 6. 综合评分 (频率权重 + 遗漏权重)
         max_front_freq = max(front_freq.values()) or 1
         max_front_missing = max(front_missing.values()) or 1
+        missing_weight = 1.0 - freq_weight
 
         front_scores = []
         for n in front_range:
-            score = (front_freq[n] / max_front_freq) * 0.55 + (front_missing[n] / max_front_missing) * 0.45
+            score = (front_freq[n] / max_front_freq) * freq_weight + (front_missing[n] / max_front_missing) * missing_weight
             front_scores.append({
                 "number": n,
                 "freq": front_freq[n],
@@ -136,7 +138,7 @@ class TrendPredictor:
 
         back_scores = []
         for n in back_range:
-            score = (back_freq[n] / max_back_freq) * 0.55 + (back_missing[n] / max_back_missing) * 0.45
+            score = (back_freq[n] / max_back_freq) * freq_weight + (back_missing[n] / max_back_missing) * missing_weight
             back_scores.append({
                 "number": n,
                 "freq": back_freq[n],

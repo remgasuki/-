@@ -619,11 +619,13 @@ async function runPrediction() {
     const container = document.getElementById("prediction-results");
     container.innerHTML = '<div style="text-align:center;padding:40px;"><span class="loading"></span> 正在计算预测结果...</div>';
 
-    // 读取用户选择的参考期数
+    // 读取用户选择的参考期数和预测数量
     const lookbackSelect = document.getElementById("lookback-select");
     const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+    const countSelect = document.getElementById("predict-count-select");
+    const count = countSelect ? parseInt(countSelect.value) : 1;
 
-    const data = await apiGet(`/api/predict/comprehensive?lookback=${lookback}`);
+    const data = await apiGet(`/api/predict/comprehensive?lookback=${lookback}&count=${count}`);
     if (!data) {
         container.innerHTML = '<p style="color:red;">预测失败，请重试</p>';
         return;
@@ -632,6 +634,7 @@ async function runPrediction() {
     const fn = data.front_name || "前区";
     const bn = data.back_name || "后区";
     const stats = data.stats || {};
+    const predictions = data.predictions || [];
     const pad = (n) => String(n).padStart(2, '0');
 
     // 热门号/冷门号展示
@@ -640,22 +643,29 @@ async function runPrediction() {
     const hotBackHtml = (stats.hot_back || []).map(n => `<span class="ball ball-back ball-small">${pad(n)}</span>`).join("");
     const coldBackHtml = (stats.cold_back || []).map(n => `<span class="ball ball-back ball-small">${pad(n)}</span>`).join("");
 
-    container.innerHTML = `
-        <div class="prediction-result" style="margin-top:12px;">
-            <div class="method-name" style="font-size:16px;color:#1a73e8;">🎯 基于近${lookback}期数据的统计分析推荐</div>
-            <div class="balls-row" style="margin:12px 0;">
-                ${data.front_pred.map(n => `<span class="ball ball-front">${pad(n)}</span>`).join("")}
+    // 构建各组预测结果HTML
+    const weightLabels = ['标准策略', '偏冷号策略', '偏热号策略', '强冷号策略', '强热号策略',
+        '冷号优先', '热号优先', '均衡策略', '极热策略', '极冷策略'];
+    let groupsHtml = predictions.map((pred, idx) => {
+        return `
+        <div class="prediction-result" style="margin-top:12px;padding:12px;background:${idx % 2 === 0 ? '#fafafa' : '#fff'};border-radius:8px;border:1px solid #e8e8e8;">
+            <div class="method-name" style="font-size:15px;color:#1a73e8;margin-bottom:4px;">
+                🎯 第${idx + 1}组推荐（${weightLabels[idx % 10]}）
+            </div>
+            <div class="balls-row" style="margin:8px 0;">
+                ${pred.front_pred.map(n => `<span class="ball ball-front">${pad(n)}</span>`).join("")}
                 <span style="margin:0 8px;font-weight:bold;font-size:20px;">+</span>
-                ${data.back_pred.map(n => `<span class="ball ball-back">${pad(n)}</span>`).join("")}
+                ${pred.back_pred.map(n => `<span class="ball ball-back">${pad(n)}</span>`).join("")}
             </div>
-        </div>
+            <div style="font-size:11px;color:#666;line-height:1.6;">
+                ${(pred.reasons || []).map(r => `<div>• ${r}</div>`).join("")}
+            </div>
+        </div>`;
+    }).join("");
 
-        <div class="card" style="margin-top:12px;background:#f0f7ff;">
-            <div class="card-title" style="font-size:13px;">📊 推荐依据</div>
-            <div style="font-size:12px;line-height:1.8;color:#333;">
-                ${(data.reasons || []).map(r => `<div style="margin-bottom:6px;">• ${r}</div>`).join("")}
-            </div>
-        </div>
+    container.innerHTML = `
+        <div style="margin-top:12px;font-size:14px;color:#1a73e8;font-weight:bold;">📊 基于近${lookback}期数据，共生成 ${count} 组推荐号码</div>
+        ${groupsHtml}
 
         <div class="card" style="margin-top:12px;background:#fff8e1;">
             <div class="card-title" style="font-size:13px;">📈 统计分析摘要（近${lookback}期，共${stats.total_issues || 0}期）</div>

@@ -416,8 +416,9 @@ function analyzeConsecutive(data) {
 /**
  * 基于统计分析的确定性预测（无随机，每次结果相同）
  * @param {number} lookback - 参考期数
+ * @param {number} freqWeight - 频率权重（0.3~0.7），不同权重产生不同预测结果
  */
-function predictByStatistics(lookback) {
+function predictByStatistics(lookback, freqWeight = 0.55) {
     const data = lotteryData.slice(-lookback);
     const fc = FC(), bc = BC();
     const fm = FM(), bm = BM();
@@ -506,13 +507,14 @@ function predictByStatistics(lookback) {
     const maxFrontFreq = Math.max(...Object.values(frontFreq), 1);
     const maxFrontMissing = Math.max(...Object.values(frontMissing), 1);
 
+    const missingWeight = 1.0 - freqWeight;
     const frontScores = FR().map(n => ({
         number: n,
         freq: frontFreq[n],
         missing: frontMissing[n],
         isOdd: n % 2 === 1,
         isBig: n >= fm,
-        score: (frontFreq[n] / maxFrontFreq) * 0.55 + (frontMissing[n] / maxFrontMissing) * 0.45
+        score: (frontFreq[n] / maxFrontFreq) * freqWeight + (frontMissing[n] / maxFrontMissing) * missingWeight
     }));
     frontScores.sort((a, b) => b.score - a.score);
 
@@ -525,7 +527,7 @@ function predictByStatistics(lookback) {
         missing: backMissing[n],
         isOdd: n % 2 === 1,
         isBig: n >= bm,
-        score: (backFreq[n] / maxBackFreq) * 0.55 + (backMissing[n] / maxBackMissing) * 0.45
+        score: (backFreq[n] / maxBackFreq) * freqWeight + (backMissing[n] / maxBackMissing) * missingWeight
     }));
     backScores.sort((a, b) => b.score - a.score);
 
@@ -680,14 +682,25 @@ function runPrediction() {
     const container = document.getElementById("prediction-results");
     container.innerHTML = '<div style="text-align:center;padding:30px;"><span class="loading"></span> 计算中...</div>';
 
-    // 读取用户选择的参考期数
+    // 读取用户选择的参考期数和预测数量
     const lookbackSelect = document.getElementById("lookback-select");
     const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+    const countSelect = document.getElementById("predict-count-select");
+    const count = countSelect ? parseInt(countSelect.value) : 1;
 
     setTimeout(() => {
-        const data = predictByStatistics(lookback);
+        // 不同权重策略，产生不同的预测结果
+        const weightStrategies = [0.55, 0.45, 0.65, 0.35, 0.75, 0.40, 0.60, 0.50, 0.70, 0.30];
+        const predictions = [];
         const fn = FN(), bn = BN();
-        const stats = data.stats;
+
+        for (let g = 0; g < count; g++) {
+            const freqWeight = weightStrategies[g % weightStrategies.length];
+            predictions.push(predictByStatistics(lookback, freqWeight));
+        }
+
+        // 使用第一组的统计信息（所有组基于相同数据，统计摘要相同）
+        const stats = predictions[0].stats;
 
         // 热门号/冷门号展示
         const hotFrontHtml = stats.hot_front.map(n => `<span class="ball ball-front ball-small">${String(n).padStart(2, '0')}</span>`).join("");
@@ -695,50 +708,41 @@ function runPrediction() {
         const hotBackHtml = stats.hot_back.map(n => `<span class="ball ball-back ball-small">${String(n).padStart(2, '0')}</span>`).join("");
         const coldBackHtml = stats.cold_back.map(n => `<span class="ball ball-back ball-small">${String(n).padStart(2, '0')}</span>`).join("");
 
-        container.innerHTML = `
-            <div class="prediction-result" style="margin-top:12px;">
-                <div class="method-name" style="font-size:16px;color:#1a73e8;">🎯 基于近${lookback}期数据的统计分析推荐</div>
-                <div class="balls-row" style="margin:12px 0;">
+        // 构建各组预测结果HTML
+        let groupsHtml = predictions.map((data, idx) => {
+            const weightLabel = ['标准策略', '偏冷号策略', '偏热号策略', '强冷号策略', '强热号策略',
+                '冷号优先', '热号优先', '均衡策略', '极热策略', '极冷策略'][idx % 10];
+            return `
+            <div class="prediction-result" style="margin-top:12px;padding:12px;background:${idx % 2 === 0 ? '#fafafa' : '#fff'};border-radius:8px;border:1px solid #e8e8e8;">
+                <div class="method-name" style="font-size:15px;color:#1a73e8;margin-bottom:4px;">
+                    🎯 第${idx + 1}组推荐（${weightLabel}）
+                </div>
+                <div class="balls-row" style="margin:8px 0;">
                     ${data.front_pred.map(n => `<span class="ball ball-front">${String(n).padStart(2, '0')}</span>`).join("")}
                     <span style="margin:0 8px;font-weight:bold;font-size:20px;">+</span>
                     ${data.back_pred.map(n => `<span class="ball ball-back">${String(n).padStart(2, '0')}</span>`).join("")}
                 </div>
-            </div>
-
-            <div class="card" style="margin-top:12px;background:#f0f7ff;">
-                <div class="card-title" style="font-size:13px;">📊 推荐依据</div>
-                <div style="font-size:12px;line-height:1.8;color:#333;">
-                    ${data.reasons.map(r => `<div style="margin-bottom:6px;">• ${r}</div>`).join("")}
+                <div style="font-size:11px;color:#666;line-height:1.6;">
+                    ${data.reasons.map(r => `<div>• ${r}</div>`).join("")}
                 </div>
-            </div>
+            </div>`;
+        }).join("");
+
+        container.innerHTML = `
+            <div style="margin-top:12px;font-size:14px;color:#1a73e8;font-weight:bold;">📊 基于近${lookback}期数据，共生成 ${count} 组推荐号码</div>
+            ${groupsHtml}
 
             <div class="card" style="margin-top:12px;background:#fff8e1;">
                 <div class="card-title" style="font-size:13px;">📈 统计分析摘要（近${lookback}期，共${stats.total_issues}期）</div>
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
-                    <div>
-                        <strong>🔥 ${fn}热号：</strong>${hotFrontHtml}
-                    </div>
-                    <div>
-                        <strong>❄️ ${fn}冷号：</strong>${coldFrontHtml}
-                    </div>
-                    <div>
-                        <strong>🔥 ${bn}热号：</strong>${hotBackHtml}
-                    </div>
-                    <div>
-                        <strong>❄️ ${bn}冷号：</strong>${coldBackHtml}
-                    </div>
-                    <div>
-                        <strong>🔢 ${fn}奇偶比：</strong>${stats.odd_even_front}
-                    </div>
-                    <div>
-                        <strong>📏 ${fn}大小比：</strong>${stats.big_small_front}
-                    </div>
-                    <div>
-                        <strong>🔗 连号率：</strong>${(stats.consecutive_rate * 100).toFixed(0)}%
-                    </div>
-                    <div>
-                        <strong>📋 参考期数：</strong>${lookback}期
-                    </div>
+                    <div><strong>🔥 ${fn}热号：</strong>${hotFrontHtml}</div>
+                    <div><strong>❄️ ${fn}冷号：</strong>${coldFrontHtml}</div>
+                    <div><strong>🔥 ${bn}热号：</strong>${hotBackHtml}</div>
+                    <div><strong>❄️ ${bn}冷号：</strong>${coldBackHtml}</div>
+                    <div><strong>🔢 ${fn}奇偶比：</strong>${stats.odd_even_front}</div>
+                    <div><strong>📏 ${fn}大小比：</strong>${stats.big_small_front}</div>
+                    <div><strong>🔗 连号率：</strong>${(stats.consecutive_rate * 100).toFixed(0)}%</div>
+                    <div><strong>📋 参考期数：</strong>${lookback}期</div>
                 </div>
             </div>
 
