@@ -412,133 +412,343 @@ function analyzeConsecutive(data) {
 }
 
 // ==================== 预测算法 ====================
-function weightedSample(population, weights, k) {
-    const result = [];
-    const pop = [...population];
-    const w = [...weights];
-    for (let i = 0; i < k; i++) {
-        if (pop.length === 0) break;
-        const total = w.reduce((a, b) => a + b, 0);
-        let r = Math.random() * total;
-        let cumsum = 0;
-        for (let j = 0; j < w.length; j++) {
-            cumsum += w[j];
-            if (r <= cumsum) {
-                result.push(pop[j]);
-                pop.splice(j, 1);
-                w.splice(j, 1);
-                break;
-            }
-        }
-    }
-    return result;
-}
 
-function predictWeightedRandom(lookback = 50) {
+/**
+ * 基于统计分析的确定性预测（无随机，每次结果相同）
+ * @param {number} lookback - 参考期数
+ */
+function predictByStatistics(lookback) {
     const data = lotteryData.slice(-lookback);
-    const frontCounter = {};
-    const backCounter = {};
-    FR().forEach(n => frontCounter[n] = 0);
-    BR().forEach(n => backCounter[n] = 0);
-    data.forEach(d => { d.front_nums.forEach(n => frontCounter[n]++); d.back_nums.forEach(n => backCounter[n]++); });
-    const frontWeights = FR().map(n => frontCounter[n] + 1);
-    const backWeights = BR().map(n => backCounter[n] + 1);
-    return {
-        method: "加权随机预测",
-        front_pred: weightedSample(FR(), frontWeights, FC()).sort((a, b) => a - b),
-        back_pred: weightedSample(BR(), backWeights, BC()).sort((a, b) => a - b),
-        confidence: "低（仅供参考）"
-    };
-}
+    const fc = FC(), bc = BC();
+    const fm = FM(), bm = BM();
 
-function predictMarkovChain(lookback = 30) {
-    const data = lotteryData.slice(-lookback);
-    if (data.length < 2) return predictWeightedRandom(lookback);
-    const frontTrans = {};
-    const backTrans = {};
-    for (let i = 0; i < data.length - 1; i++) {
-        const curr = data[i], next = data[i + 1];
-        curr.front_nums.forEach(n => {
-            if (!frontTrans[n]) frontTrans[n] = {};
-            next.front_nums.forEach(m => { frontTrans[n][m] = (frontTrans[n][m] || 0) + 1; });
-        });
-        curr.back_nums.forEach(n => {
-            if (!backTrans[n]) backTrans[n] = {};
-            next.back_nums.forEach(m => { backTrans[n][m] = (backTrans[n][m] || 0) + 1; });
-        });
-    }
-    const last = data[data.length - 1];
-    const frontCandidates = {};
-    const backCandidates = {};
-    last.front_nums.forEach(n => {
-        if (frontTrans[n]) Object.entries(frontTrans[n]).forEach(([m, w]) => { frontCandidates[m] = (frontCandidates[m] || 0) + w; });
+    // ========== 1. 频率统计 ==========
+    const frontFreq = {}, backFreq = {};
+    FR().forEach(n => frontFreq[n] = 0);
+    BR().forEach(n => backFreq[n] = 0);
+    data.forEach(d => {
+        d.front_nums.forEach(n => frontFreq[n]++);
+        d.back_nums.forEach(n => backFreq[n]++);
     });
-    last.back_nums.forEach(n => {
-        if (backTrans[n]) Object.entries(backTrans[n]).forEach(([m, w]) => { backCandidates[m] = (backCandidates[m] || 0) + w; });
-    });
-    FR().forEach(n => { if (!frontCandidates[n]) frontCandidates[n] = 1; });
-    BR().forEach(n => { if (!backCandidates[n]) backCandidates[n] = 1; });
-    const fEntries = Object.entries(frontCandidates);
-    const bEntries = Object.entries(backCandidates);
-    return {
-        method: "马尔可夫链预测",
-        front_pred: weightedSample(fEntries.map(e => parseInt(e[0])), fEntries.map(e => e[1]), FC()).sort((a, b) => a - b),
-        back_pred: weightedSample(bEntries.map(e => parseInt(e[0])), bEntries.map(e => e[1]), BC()).sort((a, b) => a - b),
-        confidence: "低（仅供参考）"
-    };
-}
 
-function predictMovingAverage(window = 10) {
-    if (lotteryData.length < window) return predictWeightedRandom();
-    const frontIntervals = {};
-    const backIntervals = {};
+    // ========== 2. 遗漏统计 ==========
+    const frontMissing = {}, backMissing = {};
     FR().forEach(n => {
-        const intervals = [];
-        let lastSeen = null;
-        lotteryData.forEach((d, i) => {
-            if (d.front_nums.includes(n)) { if (lastSeen !== null) intervals.push(i - lastSeen); lastSeen = i; }
-        });
-        frontIntervals[n] = intervals.length > 0 ? intervals.slice(-window).reduce((a, b) => a + b, 0) / Math.min(intervals.length, window) : Infinity;
+        let missing = 0;
+        for (let i = data.length - 1; i >= 0; i--) {
+            if (data[i].front_nums.includes(n)) break;
+            missing++;
+        }
+        frontMissing[n] = missing;
     });
     BR().forEach(n => {
-        const intervals = [];
-        let lastSeen = null;
-        lotteryData.forEach((d, i) => {
-            if (d.back_nums.includes(n)) { if (lastSeen !== null) intervals.push(i - lastSeen); lastSeen = i; }
-        });
-        backIntervals[n] = intervals.length > 0 ? intervals.slice(-window).reduce((a, b) => a + b, 0) / Math.min(intervals.length, window) : Infinity;
+        let missing = 0;
+        for (let i = data.length - 1; i >= 0; i--) {
+            if (data[i].back_nums.includes(n)) break;
+            missing++;
+        }
+        backMissing[n] = missing;
     });
-    const sortedFront = Object.entries(frontIntervals).sort((a, b) => b[1] - a[1]);
-    const sortedBack = Object.entries(backIntervals).sort((a, b) => b[1] - a[1]);
-    const fc = FC(), bc = BC();
-    const topFront = sortedFront.slice(0, fc * 3).map(e => parseInt(e[0]));
-    const topBack = sortedBack.slice(0, bc * 3).map(e => parseInt(e[0]));
+
+    // ========== 3. 连号趋势 ==========
+    let consecutiveCount = 0;
+    data.forEach(d => {
+        const sorted = [...d.front_nums].sort((a, b) => a - b);
+        for (let i = 0; i < sorted.length - 1; i++) {
+            if (sorted[i + 1] - sorted[i] === 1) { consecutiveCount++; break; }
+        }
+    });
+    const consecutiveRate = data.length > 0 ? (consecutiveCount / data.length) : 0;
+
+    // ========== 4. 奇偶比分布 ==========
+    const oddEvenCounts = {};
+    data.forEach(d => {
+        const odd = d.front_nums.filter(n => n % 2 === 1).length;
+        const key = odd + ":" + (fc - odd);
+        oddEvenCounts[key] = (oddEvenCounts[key] || 0) + 1;
+    });
+    const sortedOE = Object.entries(oddEvenCounts).sort((a, b) => b[1] - a[1]);
+    const bestOddEven = sortedOE.length > 0 ? sortedOE[0][0] : "0:0";
+    const [targetOdd] = bestOddEven.split(":").map(Number);
+
+    const backOddEvenCounts = {};
+    data.forEach(d => {
+        const odd = d.back_nums.filter(n => n % 2 === 1).length;
+        const key = odd + ":" + (bc - odd);
+        backOddEvenCounts[key] = (backOddEvenCounts[key] || 0) + 1;
+    });
+    const sortedBOE = Object.entries(backOddEvenCounts).sort((a, b) => b[1] - a[1]);
+    const bestBackOddEven = sortedBOE.length > 0 ? sortedBOE[0][0] : "0:0";
+    const [targetBackOdd] = bestBackOddEven.split(":").map(Number);
+
+    // ========== 5. 大小比分布 ==========
+    const bigSmallCounts = {};
+    data.forEach(d => {
+        const big = d.front_nums.filter(n => n >= fm).length;
+        const key = big + ":" + (fc - big);
+        bigSmallCounts[key] = (bigSmallCounts[key] || 0) + 1;
+    });
+    const sortedBS = Object.entries(bigSmallCounts).sort((a, b) => b[1] - a[1]);
+    const bestBigSmall = sortedBS.length > 0 ? sortedBS[0][0] : "0:0";
+    const [targetBig] = bestBigSmall.split(":").map(Number);
+
+    const backBigSmallCounts = {};
+    data.forEach(d => {
+        const big = d.back_nums.filter(n => n >= bm).length;
+        const key = big + ":" + (bc - big);
+        backBigSmallCounts[key] = (backBigSmallCounts[key] || 0) + 1;
+    });
+    const sortedBBS = Object.entries(backBigSmallCounts).sort((a, b) => b[1] - a[1]);
+    const bestBackBigSmall = sortedBBS.length > 0 ? sortedBBS[0][0] : "0:0";
+    const [targetBackBig] = bestBackBigSmall.split(":").map(Number);
+
+    // ========== 6. 综合评分 ==========
+    const maxFrontFreq = Math.max(...Object.values(frontFreq), 1);
+    const maxFrontMissing = Math.max(...Object.values(frontMissing), 1);
+
+    const frontScores = FR().map(n => ({
+        number: n,
+        freq: frontFreq[n],
+        missing: frontMissing[n],
+        isOdd: n % 2 === 1,
+        isBig: n >= fm,
+        score: (frontFreq[n] / maxFrontFreq) * 0.55 + (frontMissing[n] / maxFrontMissing) * 0.45
+    }));
+    frontScores.sort((a, b) => b.score - a.score);
+
+    const maxBackFreq = Math.max(...Object.values(backFreq), 1);
+    const maxBackMissing = Math.max(...Object.values(backMissing), 1);
+
+    const backScores = BR().map(n => ({
+        number: n,
+        freq: backFreq[n],
+        missing: backMissing[n],
+        isOdd: n % 2 === 1,
+        isBig: n >= bm,
+        score: (backFreq[n] / maxBackFreq) * 0.55 + (backMissing[n] / maxBackMissing) * 0.45
+    }));
+    backScores.sort((a, b) => b.score - a.score);
+
+    // ========== 7. 选择前区号码（兼顾奇偶比和大小比） ==========
+    const selectedFront = [];
+    const selectedFrontSet = new Set();
+    let selectedOdd = 0, selectedBig = 0;
+
+    for (const c of frontScores) {
+        if (selectedFront.length >= fc) break;
+        if (selectedFrontSet.has(c.number)) continue;
+        const wouldOdd = selectedOdd + (c.isOdd ? 1 : 0);
+        const wouldBig = selectedBig + (c.isBig ? 1 : 0);
+        const remaining = fc - selectedFront.length;
+        const maxOdd = targetOdd + Math.max(1, Math.ceil(remaining / 2));
+        const maxBig = targetBig + Math.max(1, Math.ceil(remaining / 2));
+        if (wouldOdd > maxOdd || wouldBig > maxBig) continue;
+        selectedFront.push(c.number);
+        selectedFrontSet.add(c.number);
+        selectedOdd = wouldOdd;
+        selectedBig = wouldBig;
+    }
+
+    // 如果还不够，放宽限制补齐
+    for (const c of frontScores) {
+        if (selectedFront.length >= fc) break;
+        if (!selectedFrontSet.has(c.number)) {
+            selectedFront.push(c.number);
+            selectedFrontSet.add(c.number);
+        }
+    }
+    selectedFront.sort((a, b) => a - b);
+
+    // ========== 8. 选择后区号码 ==========
+    const selectedBack = [];
+    const selectedBackSet = new Set();
+    let selectedBackOdd = 0, selectedBackBig = 0;
+
+    for (const c of backScores) {
+        if (selectedBack.length >= bc) break;
+        if (selectedBackSet.has(c.number)) continue;
+        const wouldOdd = selectedBackOdd + (c.isOdd ? 1 : 0);
+        const wouldBig = selectedBackBig + (c.isBig ? 1 : 0);
+        const remaining = bc - selectedBack.length;
+        const maxOdd = targetBackOdd + Math.max(1, Math.ceil(remaining / 2));
+        const maxBig = targetBackBig + Math.max(1, Math.ceil(remaining / 2));
+        if (wouldOdd > maxOdd || wouldBig > maxBig) continue;
+        selectedBack.push(c.number);
+        selectedBackSet.add(c.number);
+        selectedBackOdd = wouldOdd;
+        selectedBackBig = wouldBig;
+    }
+
+    for (const c of backScores) {
+        if (selectedBack.length >= bc) break;
+        if (!selectedBackSet.has(c.number)) {
+            selectedBack.push(c.number);
+            selectedBackSet.add(c.number);
+        }
+    }
+    selectedBack.sort((a, b) => a - b);
+
+    // ========== 9. 生成推荐理由 ==========
+    const reasons = buildReasons(
+        selectedFront, selectedBack,
+        frontFreq, backFreq, frontMissing, backMissing,
+        lookback, bestOddEven, bestBigSmall, bestBackOddEven, bestBackBigSmall,
+        consecutiveRate, oddEvenCounts, bigSmallCounts, data
+    );
+
+    // ========== 10. 热门号/冷门号列表 ==========
+    const topHotFront = frontScores.filter(c => c.freq > 0).slice(0, fc + 3).map(c => c.number);
+    const topColdFront = [...frontScores].sort((a, b) => b.missing - a.missing).slice(0, fc + 3).map(c => c.number);
+    const topHotBack = backScores.filter(c => c.freq > 0).slice(0, bc + 3).map(c => c.number);
+    const topColdBack = [...backScores].sort((a, b) => b.missing - a.missing).slice(0, bc + 3).map(c => c.number);
+
     return {
-        method: "移动平均预测",
-        front_pred: sample(topFront, Math.min(fc, topFront.length)),
-        back_pred: sample(topBack, Math.min(bc, topBack.length)),
-        confidence: "低（仅供参考）"
+        front_pred: selectedFront,
+        back_pred: selectedBack,
+        reasons: reasons,
+        stats: {
+            lookback: lookback,
+            total_issues: data.length,
+            hot_front: topHotFront,
+            cold_front: topColdFront,
+            hot_back: topHotBack,
+            cold_back: topColdBack,
+            odd_even_front: bestOddEven,
+            big_small_front: bestBigSmall,
+            odd_even_back: bestBackOddEven,
+            big_small_back: bestBackBigSmall,
+            consecutive_rate: consecutiveRate,
+            oe_distribution: oddEvenCounts,
+            bs_distribution: bigSmallCounts
+        }
     };
 }
 
-function predictComprehensive() {
-    const weighted = predictWeightedRandom();
-    const markov = predictMarkovChain();
-    const movingAvg = predictMovingAverage();
-    const allFront = {};
-    const allBack = {};
-    [weighted, markov, movingAvg].forEach(p => {
-        p.front_pred.forEach(n => allFront[n] = (allFront[n] || 0) + 1);
-        p.back_pred.forEach(n => allBack[n] = (allBack[n] || 0) + 1);
+/**
+ * 生成推荐理由
+ */
+function buildReasons(front, back, frontFreq, backFreq, frontMissing, backMissing,
+                       lookback, bestOE, bestBS, bestBOE, bestBBS,
+                       consecutiveRate, oeCounts, bsCounts, data) {
+    const fn = FN(), bn = BN();
+    const reasons = [];
+
+    // 热号理由
+    const frontReasons = front.map(n => {
+        const freq = frontFreq[n] || 0;
+        const missing = frontMissing[n] || 0;
+        if (freq >= 2) return `${fn}${String(n).padStart(2, '0')}(热号，近${lookback}期出现${freq}次)`;
+        if (missing >= lookback * 0.3) return `${fn}${String(n).padStart(2, '0')}(冷号回补，已遗漏${missing}期)`;
+        return `${fn}${String(n).padStart(2, '0')}(出现${freq}次，遗漏${missing}期)`;
     });
-    const fc = FC(), bc = BC();
-    const topFront = Object.entries(allFront).sort((a, b) => b[1] - a[1]).slice(0, fc).map(e => parseInt(e[0]));
-    const topBack = Object.entries(allBack).sort((a, b) => b[1] - a[1]).slice(0, bc).map(e => parseInt(e[0]));
-    return { weighted_random: weighted, markov_chain: markov, moving_average: movingAvg,
-             comprehensive: { front_pred: topFront.sort((a, b) => a - b), back_pred: topBack.sort((a, b) => a - b) } };
+    reasons.push(frontReasons.join("；"));
+
+    // 后区理由
+    const backReasons = back.map(n => {
+        const freq = backFreq[n] || 0;
+        const missing = backMissing[n] || 0;
+        if (freq >= 2) return `${bn}${String(n).padStart(2, '0')}(热号，近${lookback}期出现${freq}次)`;
+        if (missing >= lookback * 0.3) return `${bn}${String(n).padStart(2, '0')}(冷号回补，已遗漏${missing}期)`;
+        return `${bn}${String(n).padStart(2, '0')}(出现${freq}次，遗漏${missing}期)`;
+    });
+    reasons.push(backReasons.join("；"));
+
+    // 连号趋势
+    if (consecutiveRate >= 0.4) {
+        reasons.push(`近${lookback}期连号率${(consecutiveRate * 100).toFixed(0)}%，建议关注连号组合`);
+    }
+
+    // 奇偶比参考
+    const oeCount = oeCounts[bestOE] || 0;
+    reasons.push(`参考${fn}奇偶比 ${bestOE}（近${lookback}期出现${oeCount}次，占比${(oeCount / data.length * 100).toFixed(0)}%）`);
+
+    // 大小比参考
+    const bsCount = bsCounts[bestBS] || 0;
+    reasons.push(`参考${fn}大小比 ${bestBS}（近${lookback}期出现${bsCount}次，占比${(bsCount / data.length * 100).toFixed(0)}%）`);
+
+    return reasons;
 }
 
-// ==================== UI 工具 ====================
+/**
+ * 运行预测
+ */
+function runPrediction() {
+    if (lotteryData.length < 10) {
+        showToast("数据不足，至少需要10期数据", "error");
+        return;
+    }
+    const container = document.getElementById("prediction-results");
+    container.innerHTML = '<div style="text-align:center;padding:30px;"><span class="loading"></span> 计算中...</div>';
+
+    // 读取用户选择的参考期数
+    const lookbackSelect = document.getElementById("lookback-select");
+    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+
+    setTimeout(() => {
+        const data = predictByStatistics(lookback);
+        const fn = FN(), bn = BN();
+        const stats = data.stats;
+
+        // 热门号/冷门号展示
+        const hotFrontHtml = stats.hot_front.map(n => `<span class="ball ball-front ball-small">${String(n).padStart(2, '0')}</span>`).join("");
+        const coldFrontHtml = stats.cold_front.map(n => `<span class="ball ball-front ball-small">${String(n).padStart(2, '0')}</span>`).join("");
+        const hotBackHtml = stats.hot_back.map(n => `<span class="ball ball-back ball-small">${String(n).padStart(2, '0')}</span>`).join("");
+        const coldBackHtml = stats.cold_back.map(n => `<span class="ball ball-back ball-small">${String(n).padStart(2, '0')}</span>`).join("");
+
+        container.innerHTML = `
+            <div class="prediction-result" style="margin-top:12px;">
+                <div class="method-name" style="font-size:16px;color:#1a73e8;">🎯 基于近${lookback}期数据的统计分析推荐</div>
+                <div class="balls-row" style="margin:12px 0;">
+                    ${data.front_pred.map(n => `<span class="ball ball-front">${String(n).padStart(2, '0')}</span>`).join("")}
+                    <span style="margin:0 8px;font-weight:bold;font-size:20px;">+</span>
+                    ${data.back_pred.map(n => `<span class="ball ball-back">${String(n).padStart(2, '0')}</span>`).join("")}
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:12px;background:#f0f7ff;">
+                <div class="card-title" style="font-size:13px;">📊 推荐依据</div>
+                <div style="font-size:12px;line-height:1.8;color:#333;">
+                    ${data.reasons.map(r => `<div style="margin-bottom:6px;">• ${r}</div>`).join("")}
+                </div>
+            </div>
+
+            <div class="card" style="margin-top:12px;background:#fff8e1;">
+                <div class="card-title" style="font-size:13px;">📈 统计分析摘要（近${lookback}期，共${stats.total_issues}期）</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                    <div>
+                        <strong>🔥 ${fn}热号：</strong>${hotFrontHtml}
+                    </div>
+                    <div>
+                        <strong>❄️ ${fn}冷号：</strong>${coldFrontHtml}
+                    </div>
+                    <div>
+                        <strong>🔥 ${bn}热号：</strong>${hotBackHtml}
+                    </div>
+                    <div>
+                        <strong>❄️ ${bn}冷号：</strong>${coldBackHtml}
+                    </div>
+                    <div>
+                        <strong>🔢 ${fn}奇偶比：</strong>${stats.odd_even_front}
+                    </div>
+                    <div>
+                        <strong>📏 ${fn}大小比：</strong>${stats.big_small_front}
+                    </div>
+                    <div>
+                        <strong>🔗 连号率：</strong>${(stats.consecutive_rate * 100).toFixed(0)}%
+                    </div>
+                    <div>
+                        <strong>📋 参考期数：</strong>${lookback}期
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:16px;padding:12px;background:#fff3cd;border-radius:8px;font-size:11px;color:#856404;">
+                ⚠️ <strong>免责声明：</strong>以上推荐基于历史数据统计分析，仅反映号码出现概率趋势。彩票开奖为独立随机事件，历史数据不能预测未来结果。请理性购彩，量力而行，切勿沉迷。
+            </div>
+        `;
+    }, 200);
+}
+
 function showToast(msg, type = "success") {
     const toast = document.createElement("div");
     toast.className = `toast toast-${type}`;
@@ -824,39 +1034,6 @@ function drawZoneChart(zoneData) {
     });
 }
 
-// ==================== 趋势预测 ====================
-function runPrediction() {
-    if (lotteryData.length < 10) {
-        showToast("数据不足，至少需要10期数据", "error");
-        return;
-    }
-    const container = document.getElementById("prediction-results");
-    container.innerHTML = '<div style="text-align:center;padding:30px;"><span class="loading"></span> 计算中...</div>';
-    setTimeout(() => {
-        const data = predictComprehensive();
-        const renderResult = (result, title) => `
-            <div class="prediction-result">
-                ${title ? `<div class="method-name">${title}</div>` : ""}
-                <div class="balls-row">
-                    ${result.front_pred.map(n => `<span class="ball ball-front">${n}</span>`).join("")}
-                    <span style="margin:0 6px;font-weight:bold;">+</span>
-                    ${result.back_pred.map(n => `<span class="ball ball-back">${n}</span>`).join("")}
-                </div>
-                ${result.confidence ? `<div class="confidence">⚠️ ${result.confidence} - 彩票有风险，请理性购彩</div>` : ""}
-            </div>
-        `;
-        container.innerHTML = `
-            <div style="margin-top:10px;"><h3 style="margin-bottom:8px;">🎯 综合推荐（多算法共识）</h3>${renderResult(data.comprehensive, "综合推荐")}</div>
-            <div style="margin-top:16px;"><h4 style="margin-bottom:6px;">${data.weighted_random.method}</h4>${renderResult(data.weighted_random, "")}</div>
-            <div style="margin-top:12px;"><h4 style="margin-bottom:6px;">${data.markov_chain.method}</h4>${renderResult(data.markov_chain, "")}</div>
-            <div style="margin-top:12px;"><h4 style="margin-bottom:6px;">${data.moving_average.method}</h4>${renderResult(data.moving_average, "")}</div>
-            <div style="margin-top:16px;padding:12px;background:#fff3cd;border-radius:8px;font-size:11px;color:#856404;">
-                ⚠️ <strong>免责声明：</strong>所有预测结果仅供参考，彩票开奖为随机事件，无法保证预测准确。请理性购彩，量力而行，切勿沉迷。
-            </div>
-        `;
-    }, 300);
-}
-
 // ==================== 数据导出 ====================
 function exportDataJSON() {
     if (lotteryData.length === 0) { showToast("没有数据可导出", "error"); return; }
@@ -876,7 +1053,7 @@ function exportReport() {
         big_small: analyzeBigSmall(),
         zone: analyzeZone(),
         consecutive: analyzeConsecutive(),
-        prediction: predictComprehensive()
+        prediction: predictByStatistics(Math.min(100, lotteryData.length))
     };
     const json = JSON.stringify(report, null, 2);
     downloadFile(`${LTN()}分析报告.json`, json, "application/json");

@@ -235,6 +235,14 @@ def api_dashboard():
 
 # ==================== 预测 API ====================
 
+@app.route("/api/predict/statistics")
+def api_predict_statistics():
+    """基于统计分析的智能预测（无随机）"""
+    lt = _get_lt()
+    lookback = request.args.get("lookback", 50, type=int)
+    return jsonify(_predictors[lt].predict_by_statistics(lookback))
+
+
 @app.route("/api/predict/weighted")
 def api_predict_weighted():
     """加权随机预测"""
@@ -261,9 +269,10 @@ def api_predict_moving_avg():
 
 @app.route("/api/predict/comprehensive")
 def api_predict_comprehensive():
-    """综合预测"""
+    """综合预测（使用统计分析算法）"""
     lt = _get_lt()
-    return jsonify(_predictors[lt].predict_comprehensive())
+    lookback = request.args.get("lookback", 50, type=int)
+    return jsonify(_predictors[lt].predict_by_statistics(lookback))
 
 
 # ==================== 导出 API ====================
@@ -304,7 +313,7 @@ def api_export_report():
         "frequency": _analyzers[lt].get_hot_cold_analysis(),
         "missing": _analyzers[lt].get_missing_analysis(),
         "statistics": _statistics[lt].get_dashboard_stats(),
-        "prediction": _predictors[lt].predict_comprehensive()
+        "prediction": _predictors[lt].predict_by_statistics()
     }
     path = exporter.export_analysis_report(analysis, lottery_type=lt)
     return send_file(os.path.abspath(path), as_attachment=True,

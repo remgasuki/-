@@ -619,46 +619,60 @@ async function runPrediction() {
     const container = document.getElementById("prediction-results");
     container.innerHTML = '<div style="text-align:center;padding:40px;"><span class="loading"></span> 正在计算预测结果...</div>';
 
-    const data = await apiGet("/api/predict/comprehensive");
+    // 读取用户选择的参考期数
+    const lookbackSelect = document.getElementById("lookback-select");
+    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+
+    const data = await apiGet(`/api/predict/comprehensive?lookback=${lookback}`);
     if (!data) {
         container.innerHTML = '<p style="color:red;">预测失败，请重试</p>';
         return;
     }
 
-    const renderPrediction = (result, title) => `
-        <div class="prediction-result">
-            <div class="method-name">${title}</div>
-            <div class="balls-row">
-                ${result.front_pred.map(n => `<span class="ball ball-front">${n}</span>`).join("")}
-                <span style="margin: 0 8px; font-weight: bold;">+</span>
-                ${result.back_pred.map(n => `<span class="ball ball-back">${n}</span>`).join("")}
-            </div>
-            ${result.confidence ? `<div class="confidence">⚠️ ${result.confidence} - 彩票有风险，请理性购彩</div>` : ""}
-        </div>
-    `;
+    const fn = data.front_name || "前区";
+    const bn = data.back_name || "后区";
+    const stats = data.stats || {};
+    const pad = (n) => String(n).padStart(2, '0');
+
+    // 热门号/冷门号展示
+    const hotFrontHtml = (stats.hot_front || []).map(n => `<span class="ball ball-front ball-small">${pad(n)}</span>`).join("");
+    const coldFrontHtml = (stats.cold_front || []).map(n => `<span class="ball ball-front ball-small">${pad(n)}</span>`).join("");
+    const hotBackHtml = (stats.hot_back || []).map(n => `<span class="ball ball-back ball-small">${pad(n)}</span>`).join("");
+    const coldBackHtml = (stats.cold_back || []).map(n => `<span class="ball ball-back ball-small">${pad(n)}</span>`).join("");
 
     container.innerHTML = `
-        <div style="margin-top: 16px;">
-            <h3 style="margin-bottom: 12px;">🎯 综合推荐（多算法共识）</h3>
-            ${renderPrediction(data.comprehensive, "综合推荐")}
-        </div>
-        <div class="chart-row" style="margin-top: 20px;">
-            <div>
-                <h4 style="margin-bottom: 8px;">${data.weighted_random.method}</h4>
-                ${renderPrediction(data.weighted_random, "")}
-            </div>
-            <div>
-                <h4 style="margin-bottom: 8px;">${data.markov_chain.method}</h4>
-                ${renderPrediction(data.markov_chain, "")}
+        <div class="prediction-result" style="margin-top:12px;">
+            <div class="method-name" style="font-size:16px;color:#1a73e8;">🎯 基于近${lookback}期数据的统计分析推荐</div>
+            <div class="balls-row" style="margin:12px 0;">
+                ${data.front_pred.map(n => `<span class="ball ball-front">${pad(n)}</span>`).join("")}
+                <span style="margin:0 8px;font-weight:bold;font-size:20px;">+</span>
+                ${data.back_pred.map(n => `<span class="ball ball-back">${pad(n)}</span>`).join("")}
             </div>
         </div>
-        <div style="margin-top: 20px;">
-            <h4 style="margin-bottom: 8px;">${data.moving_average.method}</h4>
-            ${renderPrediction(data.moving_average, "")}
+
+        <div class="card" style="margin-top:12px;background:#f0f7ff;">
+            <div class="card-title" style="font-size:13px;">📊 推荐依据</div>
+            <div style="font-size:12px;line-height:1.8;color:#333;">
+                ${(data.reasons || []).map(r => `<div style="margin-bottom:6px;">• ${r}</div>`).join("")}
+            </div>
         </div>
-        <div style="margin-top: 20px; padding: 16px; background: #fff3cd; border-radius: 8px; font-size: 13px; color: #856404;">
-            ⚠️ <strong>免责声明：</strong>所有预测结果仅供参考，彩票开奖为随机事件，无法保证预测准确。
-            请理性购彩，量力而行，切勿沉迷。
+
+        <div class="card" style="margin-top:12px;background:#fff8e1;">
+            <div class="card-title" style="font-size:13px;">📈 统计分析摘要（近${lookback}期，共${stats.total_issues || 0}期）</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+                <div><strong>🔥 ${fn}热号：</strong>${hotFrontHtml}</div>
+                <div><strong>❄️ ${fn}冷号：</strong>${coldFrontHtml}</div>
+                <div><strong>🔥 ${bn}热号：</strong>${hotBackHtml}</div>
+                <div><strong>❄️ ${bn}冷号：</strong>${coldBackHtml}</div>
+                <div><strong>🔢 ${fn}奇偶比：</strong>${stats.odd_even_front || "-"}</div>
+                <div><strong>📏 ${fn}大小比：</strong>${stats.big_small_front || "-"}</div>
+                <div><strong>🔗 连号率：</strong>${stats.consecutive_rate ? (stats.consecutive_rate * 100).toFixed(0) + '%' : '-'}</div>
+                <div><strong>📋 参考期数：</strong>${lookback}期</div>
+            </div>
+        </div>
+
+        <div style="margin-top:16px;padding:12px;background:#fff3cd;border-radius:8px;font-size:11px;color:#856404;">
+            ⚠️ <strong>免责声明：</strong>以上推荐基于历史数据统计分析，仅反映号码出现概率趋势。彩票开奖为独立随机事件，历史数据不能预测未来结果。请理性购彩，量力而行，切勿沉迷。
         </div>
     `;
 }
