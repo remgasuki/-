@@ -49,6 +49,7 @@ async function switchLotteryType(type) {
     if (type === currentLotteryType) return;
     currentLotteryType = type;
     await loadLotteryConfig();
+    restorePredictParams();
     // 刷新当前页面
     if (currentTab === "dashboard") loadDashboard();
     else if (currentTab === "data") loadDataList();
@@ -90,7 +91,7 @@ function onTabSwitch(tab) {
         case "data": loadDataList(); break;
         case "frequency": loadFrequencyAnalysis(); break;
         case "statistics": loadStatistics(); break;
-        case "predict": break;
+        case "predict": restorePredictParams(); break;
         case "export": break;
     }
 }
@@ -614,6 +615,35 @@ function drawZoneChart(zoneData) {
     });
 }
 
+// ==================== 预测参数持久化 ====================
+function savePredictParams() {
+    const lookbackSelect = document.getElementById("lookback-select");
+    const countSelect = document.getElementById("predict-count-select");
+    if (lookbackSelect) {
+        localStorage.setItem(`predict_lookback_${currentLotteryType}`, lookbackSelect.value);
+    }
+    if (countSelect) {
+        localStorage.setItem(`predict_count_${currentLotteryType}`, countSelect.value);
+    }
+}
+
+function restorePredictParams() {
+    const lookbackSelect = document.getElementById("lookback-select");
+    const countSelect = document.getElementById("predict-count-select");
+    if (lookbackSelect) {
+        const savedLookback = localStorage.getItem(`predict_lookback_${currentLotteryType}`);
+        if (savedLookback) {
+            lookbackSelect.value = savedLookback;
+        }
+    }
+    if (countSelect) {
+        const savedCount = localStorage.getItem(`predict_count_${currentLotteryType}`);
+        if (savedCount) {
+            countSelect.value = savedCount;
+        }
+    }
+}
+
 // ==================== 趋势预测 ====================
 async function runPrediction() {
     const container = document.getElementById("prediction-results");
@@ -621,9 +651,12 @@ async function runPrediction() {
 
     // 读取用户选择的参考期数和预测数量
     const lookbackSelect = document.getElementById("lookback-select");
-    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 10;
     const countSelect = document.getElementById("predict-count-select");
     const count = countSelect ? parseInt(countSelect.value) : 1;
+
+    // 保存当前参数到本地存储
+    savePredictParams();
 
     const data = await apiGet(`/api/predict/comprehensive?lookback=${lookback}&count=${count}`);
     if (!data) {

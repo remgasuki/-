@@ -216,6 +216,7 @@ function switchLotteryType(type) {
     currentLotteryType = type;
     loadData();
     updateLotteryLabels();
+    restorePredictParams();
     refreshCurrentTab();
 }
 
@@ -674,6 +675,35 @@ function buildReasons(front, back, frontFreq, backFreq, frontMissing, backMissin
 /**
  * 运行预测
  */
+// ==================== 预测参数持久化 ====================
+function savePredictParams() {
+    const lookbackSelect = document.getElementById("lookback-select");
+    const countSelect = document.getElementById("predict-count-select");
+    if (lookbackSelect) {
+        localStorage.setItem(`predict_lookback_${currentLotteryType}`, lookbackSelect.value);
+    }
+    if (countSelect) {
+        localStorage.setItem(`predict_count_${currentLotteryType}`, countSelect.value);
+    }
+}
+
+function restorePredictParams() {
+    const lookbackSelect = document.getElementById("lookback-select");
+    const countSelect = document.getElementById("predict-count-select");
+    if (lookbackSelect) {
+        const savedLookback = localStorage.getItem(`predict_lookback_${currentLotteryType}`);
+        if (savedLookback) {
+            lookbackSelect.value = savedLookback;
+        }
+    }
+    if (countSelect) {
+        const savedCount = localStorage.getItem(`predict_count_${currentLotteryType}`);
+        if (savedCount) {
+            countSelect.value = savedCount;
+        }
+    }
+}
+
 function runPrediction() {
     if (lotteryData.length < 10) {
         showToast("数据不足，至少需要10期数据", "error");
@@ -684,9 +714,12 @@ function runPrediction() {
 
     // 读取用户选择的参考期数和预测数量
     const lookbackSelect = document.getElementById("lookback-select");
-    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 50;
+    const lookback = lookbackSelect ? parseInt(lookbackSelect.value) : 10;
     const countSelect = document.getElementById("predict-count-select");
     const count = countSelect ? parseInt(countSelect.value) : 1;
+
+    // 保存当前参数到本地存储
+    savePredictParams();
 
     setTimeout(() => {
         // 不同权重策略，产生不同的预测结果
@@ -788,7 +821,7 @@ function onTabSwitch(tab) {
         case "data": loadDataList(); break;
         case "frequency": loadFrequencyAnalysis(); break;
         case "statistics": loadStatistics(); break;
-        case "predict": break;
+        case "predict": restorePredictParams(); break;
         case "scanner": break;
         case "export": break;
     }
