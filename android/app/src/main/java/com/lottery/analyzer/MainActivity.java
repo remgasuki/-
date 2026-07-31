@@ -92,7 +92,14 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage consoleMessage) {
+                android.util.Log.d("WebView", consoleMessage.message() + " -- line " +
+                        consoleMessage.lineNumber() + " of " + consoleMessage.sourceId());
+                return true;
+            }
+        });
 
         // 注册 JavaScript 接口（用于扫描验奖）
         webView.addJavascriptInterface(new ScannerInterface(), "ScannerBridge");
@@ -130,7 +137,18 @@ public class MainActivity extends AppCompatActivity {
      * 处理扫描结果，回调给 JavaScript
      */
     private void onScanResult(int[] frontNums, int[] backNums, String lotteryType, String issue) {
-        StringBuilder js = new StringBuilder("onScannerResult({");
+        // 构建号码描述
+        StringBuilder numDesc = new StringBuilder();
+        for (int n : frontNums) numDesc.append(String.format("%02d ", n));
+        numDesc.append("+ ");
+        for (int n : backNums) numDesc.append(String.format("%02d ", n));
+        String typeName = lotteryType.equals("ssq") ? "双色球" : "大乐透";
+        Toast.makeText(this, typeName + "扫描完成：" + numDesc.toString().trim(), Toast.LENGTH_LONG).show();
+
+        // 构建 JS 调用代码
+        StringBuilder js = new StringBuilder("javascript:try{");
+        js.append("console.log('onScannerResult called');");
+        js.append("onScannerResult({");
         js.append("front_nums: [");
         for (int i = 0; i < frontNums.length; i++) {
             if (i > 0) js.append(",");
@@ -145,8 +163,8 @@ public class MainActivity extends AppCompatActivity {
         if (issue != null && !issue.isEmpty()) {
             js.append(", issue: '").append(issue).append("'");
         }
-        js.append("})");
-        webView.post(() -> webView.evaluateJavascript(js.toString(), null));
+        js.append("});}catch(e){console.log('onScannerResult error: '+e.message);}");
+        webView.post(() -> webView.loadUrl(js.toString()));
     }
 
     /**

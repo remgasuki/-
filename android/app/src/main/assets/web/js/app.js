@@ -943,52 +943,62 @@ function startScanSSQ() {
  * @param {Object} result - { front_nums: [], back_nums: [], lottery_type: "dlt"|"ssq", issue?: "25001" }
  */
 function onScannerResult(result) {
-    if (!result || !result.front_nums || !result.back_nums) {
-        showToast("扫描结果无效", "error");
-        return;
-    }
-
-    const frontNums = result.front_nums;
-    const backNums = result.back_nums;
-    const lotteryType = result.lottery_type || "dlt";
-    const scannedIssue = result.issue || null;
-
-    // 确保切换到正确的彩种并加载数据
-    if (lotteryType !== currentLotteryType) {
-        switchLotteryType(lotteryType);
-    }
-
-    // 检查数据是否存在
-    if (lotteryData.length === 0) {
-        showScanResult(frontNums, backNums, null, "暂无开奖数据，请先获取最新开奖号码", lotteryType);
-        return;
-    }
-
-    // 切换到扫描验奖页签
-    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
-    const scannerBtn = document.querySelector('.tab-btn[data-tab="scanner"]');
-    if (scannerBtn) scannerBtn.classList.add("active");
-    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
-    const scannerPanel = document.getElementById("tab-scanner");
-    if (scannerPanel) scannerPanel.classList.add("active");
-
-    // 按期号查找对应的开奖数据
-    let drawData = null;
-    if (scannedIssue) {
-        drawData = findDrawByIssue(scannedIssue);
-    }
-
-    // 如果未识别到期号或找不到对应期号，使用最新一期
-    if (!drawData) {
-        drawData = lotteryData[lotteryData.length - 1];
-        if (!scannedIssue) {
-            // 未识别到期号，使用最新期并提示
-            checkPrize(frontNums, backNums, drawData, lotteryType, null);
+    try {
+        console.log('onScannerResult received: ' + JSON.stringify(result));
+        if (!result || !result.front_nums || !result.back_nums) {
+            console.log('onScannerResult: invalid result');
+            showToast("扫描结果无效", "error");
             return;
         }
-    }
 
-    checkPrize(frontNums, backNums, drawData, lotteryType, scannedIssue);
+        const frontNums = result.front_nums;
+        const backNums = result.back_nums;
+        const lotteryType = result.lottery_type || "dlt";
+        const scannedIssue = result.issue || null;
+
+        console.log('onScannerResult: type=' + lotteryType + ', issue=' + scannedIssue + ', dataLen=' + lotteryData.length);
+
+        // 确保切换到正确的彩种并加载数据
+        if (lotteryType !== currentLotteryType) {
+            switchLotteryType(lotteryType);
+        }
+
+        // 检查数据是否存在
+        if (lotteryData.length === 0) {
+            console.log('onScannerResult: no data, showing error');
+            showScanResult(frontNums, backNums, null, "暂无开奖数据，请先获取最新开奖号码", lotteryType);
+            return;
+        }
+
+        // 切换到扫描验奖页签
+        document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+        const scannerBtn = document.querySelector('.tab-btn[data-tab="scanner"]');
+        if (scannerBtn) scannerBtn.classList.add("active");
+        document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+        const scannerPanel = document.getElementById("tab-scanner");
+        if (scannerPanel) scannerPanel.classList.add("active");
+
+        // 按期号查找对应的开奖数据
+        let drawData = null;
+        if (scannedIssue) {
+            drawData = findDrawByIssue(scannedIssue);
+        }
+
+        // 如果未识别到期号或找不到对应期号，使用最新一期
+        if (!drawData) {
+            drawData = lotteryData[lotteryData.length - 1];
+            if (!scannedIssue) {
+                // 未识别到期号，使用最新期并提示
+                checkPrize(frontNums, backNums, drawData, lotteryType, null);
+                return;
+            }
+        }
+
+        checkPrize(frontNums, backNums, drawData, lotteryType, scannedIssue);
+    } catch (e) {
+        console.log('onScannerResult error: ' + e.message);
+        showToast("扫描结果处理出错：" + e.message, "error");
+    }
 }
 
 /**
