@@ -57,7 +57,16 @@
             android:layout_height="wrap_content"
             android:textColor="#FFD700"
             android:textSize="14sp"
-            android:layout_marginBottom="8dp" />
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/tvIssueNumber"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#4FC3F7"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tvDetectedNumbers"

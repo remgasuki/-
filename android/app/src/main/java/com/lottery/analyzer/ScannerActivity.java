@@ -48,6 +48,7 @@ public class ScannerActivity extends AppCompatActivity {
     private PreviewView previewView;
     private TextView tvHint;
     private TextView tvLotteryType;
+    private TextView tvIssueNumber;
     private TextView tvDetectedNumbers;
     private LinearLayout resultPanel;
     private Button btnFlash;
@@ -63,6 +64,7 @@ public class ScannerActivity extends AppCompatActivity {
     private String currentLotteryType = "dlt";
     private List<Integer> lastDetectedFront = null;
     private List<Integer> lastDetectedBack = null;
+    private String lastDetectedIssue = null;
     private long lastAnalysisTime = 0;
 
     @Override
@@ -90,6 +92,7 @@ public class ScannerActivity extends AppCompatActivity {
         previewView = findViewById(R.id.previewView);
         tvHint = findViewById(R.id.tvHint);
         tvLotteryType = findViewById(R.id.tvLotteryType);
+        tvIssueNumber = findViewById(R.id.tvIssueNumber);
         tvDetectedNumbers = findViewById(R.id.tvDetectedNumbers);
         resultPanel = findViewById(R.id.resultPanel);
         btnFlash = findViewById(R.id.btnFlash);
@@ -214,6 +217,7 @@ public class ScannerActivity extends AppCompatActivity {
             String fullText = text.getText();
             if (fullText == null || fullText.isEmpty()) return;
 
+            // 解析彩票号码
             List<Integer>[] parsed = parseLotteryNumbers(fullText, currentLotteryType);
             if (parsed == null) return;
 
@@ -233,10 +237,44 @@ public class ScannerActivity extends AppCompatActivity {
             lastDetectedFront = frontNums;
             lastDetectedBack = backNums;
 
-            runOnUiThread(() -> displayDetectedNumbers(frontNums, backNums));
+            // 尝试识别期号
+            lastDetectedIssue = parseIssueNumber(fullText);
+
+            runOnUiThread(() -> displayDetectedNumbers(frontNums, backNums, lastDetectedIssue));
 
         } catch (Exception ignored) {
         }
+    }
+
+    /**
+     * 从 OCR 识别文本中解析期号
+     * 支持格式：
+     *   - "第25001期" 或 "25001期" 或 "第 25001 期"
+     *   - "2025001" 或 "2025-001"（年份+序号）
+     *   - 纯数字 5 位以上期号
+     */
+    public static String parseIssueNumber(String text) {
+        if (text == null || text.isEmpty()) return null;
+
+        // 格式1: 第XXXXX期 或 XXXXX期
+        Matcher m1 = Pattern.compile("第\\s*(\\d{4,7})\\s*期").matcher(text);
+        if (m1.find()) {
+            return m1.group(1);
+        }
+
+        // 格式2: 纯数字5位期号（如 25001）
+        Matcher m2 = Pattern.compile("\\b(\\d{5})\\s*期").matcher(text);
+        if (m2.find()) {
+            return m2.group(1);
+        }
+
+        // 格式3: 年份+序号（如 2025001, 2025-001）
+        Matcher m3 = Pattern.compile("\\b(20\\d{2})[-\\s]?(\\d{3})\\b").matcher(text);
+        if (m3.find()) {
+            return m3.group(1) + m3.group(2);
+        }
+
+        return null;
     }
 
     /**
@@ -362,7 +400,7 @@ public class ScannerActivity extends AppCompatActivity {
         return null;
     }
 
-    private void displayDetectedNumbers(List<Integer> front, List<Integer> back) {
+    private void displayDetectedNumbers(List<Integer> front, List<Integer> back, String issue) {
         String typeName = currentLotteryType.equals("ssq") ? "双色球" : "大乐透";
 
         StringBuilder sb = new StringBuilder();
@@ -376,6 +414,14 @@ public class ScannerActivity extends AppCompatActivity {
 
         tvLotteryType.setText(typeName + " - 已识别号码");
         tvDetectedNumbers.setText(sb.toString().trim());
+
+        if (issue != null && !issue.isEmpty()) {
+            tvIssueNumber.setText("期号：" + issue + "期");
+            tvIssueNumber.setVisibility(View.VISIBLE);
+        } else {
+            tvIssueNumber.setVisibility(View.GONE);
+        }
+
         tvHint.setVisibility(View.GONE);
         resultPanel.setVisibility(View.VISIBLE);
     }
@@ -383,6 +429,7 @@ public class ScannerActivity extends AppCompatActivity {
     private void resetScanning() {
         lastDetectedFront = null;
         lastDetectedBack = null;
+        lastDetectedIssue = null;
         resultPanel.setVisibility(View.GONE);
         tvHint.setVisibility(View.VISIBLE);
         lastAnalysisTime = 0;
@@ -395,6 +442,9 @@ public class ScannerActivity extends AppCompatActivity {
         resultIntent.putExtra("front_nums", convertListToIntArray(lastDetectedFront));
         resultIntent.putExtra("back_nums", convertListToIntArray(lastDetectedBack));
         resultIntent.putExtra("lottery_type", currentLotteryType);
+        if (lastDetectedIssue != null && !lastDetectedIssue.isEmpty()) {
+            resultIntent.putExtra("issue", lastDetectedIssue);
+        }
         setResult(RESULT_OK, resultIntent);
         finish();
     }

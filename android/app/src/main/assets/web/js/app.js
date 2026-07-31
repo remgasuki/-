@@ -900,22 +900,47 @@ document.addEventListener("click", (e) => {
 // ==================== 扫描验奖 ====================
 
 /**
- * 启动扫描（通过 Android 原生桥接）
+ * 扫描大乐透
  */
-function startScan() {
+function startScanDLT() {
+    if (lotteryData.length === 0) {
+        loadData();
+        if (lotteryData.length === 0) {
+            showToast("请先在数据页获取大乐透开奖数据", "error");
+            return;
+        }
+    }
     if (typeof ScannerBridge !== "undefined" && ScannerBridge.startScanner) {
-        ScannerBridge.startScanner(currentLotteryType);
+        ScannerBridge.startScanner("dlt");
     } else {
-        // 非 Android 环境（浏览器调试），模拟扫描
         showToast("扫描功能仅在 Android App 中可用", "error");
-        // 调试模式：显示手动输入
-        showManualInput();
+        showManualInput("dlt");
+    }
+}
+
+/**
+ * 扫描双色球
+ */
+function startScanSSQ() {
+    // 先确保双色球数据已加载
+    if (currentLotteryType !== "ssq") {
+        switchLotteryType("ssq");
+    }
+    if (lotteryData.length === 0) {
+        showToast("请先在数据页获取双色球开奖数据", "error");
+        return;
+    }
+    if (typeof ScannerBridge !== "undefined" && ScannerBridge.startScanner) {
+        ScannerBridge.startScanner("ssq");
+    } else {
+        showToast("扫描功能仅在 Android App 中可用", "error");
+        showManualInput("ssq");
     }
 }
 
 /**
  * 扫描结果回调（由 Android 原生调用）
- * @param {Object} result - { front_nums: [], back_nums: [], lottery_type: "dlt"|"ssq" }
+ * @param {Object} result - { front_nums: [], back_nums: [], lottery_type: "dlt"|"ssq", issue?: "25001" }
  */
 function onScannerResult(result) {
     if (!result || !result.front_nums || !result.back_nums) {
@@ -925,11 +950,18 @@ function onScannerResult(result) {
 
     const frontNums = result.front_nums;
     const backNums = result.back_nums;
-    const lotteryType = result.lottery_type || currentLotteryType;
+    const lotteryType = result.lottery_type || "dlt";
+    const scannedIssue = result.issue || null;
 
-    // 确保切换到正确的彩种
+    // 确保切换到正确的彩种并加载数据
     if (lotteryType !== currentLotteryType) {
         switchLotteryType(lotteryType);
+    }
+
+    // 检查数据是否存在
+    if (lotteryData.length === 0) {
+        showScanResult(frontNums, backNums, null, "暂无开奖数据，请先获取最新开奖号码", lotteryType);
+        return;
     }
 
     // 切换到扫描验奖页签
@@ -940,21 +972,71 @@ function onScannerResult(result) {
     const scannerPanel = document.getElementById("tab-scanner");
     if (scannerPanel) scannerPanel.classList.add("active");
 
-    // 检查数据是否存在
-    if (lotteryData.length === 0) {
-        showScanResult(frontNums, backNums, null, "暂无开奖数据，请先获取最新开奖号码");
-        return;
+    // 按期号查找对应的开奖数据
+    let drawData = null;
+    if (scannedIssue) {
+        drawData = findDrawByIssue(scannedIssue);
     }
 
-    // 获取最新一期开奖数据
-    const latestDraw = lotteryData[lotteryData.length - 1];
-    checkPrize(frontNums, backNums, latestDraw, lotteryType);
+    // 如果未识别到期号或找不到对应期号，使用最新一期
+    if (!drawData) {
+        drawData = lotteryData[lotteryData.length - 1];
+        if (!scannedIssue) {
+            // 未识别到期号，使用最新期并提示
+            checkPrize(frontNums, backNums, drawData, lotteryType, null);
+            return;
+        }
+    }
+
+    checkPrize(frontNums, backNums, drawData, lotteryType, scannedIssue);
+}
+
+/**
+ * 按期号查找开奖数据
+ * @param {string} issue 期号（如 "25001"、"2025001"）
+ * @returns {Object|null} 匹配的开奖数据
+ */
+function findDrawByIssue(issue) {
+    if (!issue || lotteryData.length === 0) return null;
+
+    // 直接匹配
+    for (let i = lotteryData.length - 1; i >= 0; i--) {
+        if (lotteryData[i].issue === issue) {
+            return lotteryData[i];
+        }
+    }
+
+    // 模糊匹配：规范化期号后比较
+    // 大乐透期号格式："25001"，双色球期号格式："2025001"
+    const normalizedIssue = normalizeIssue(issue);
+    for (let i = lotteryData.length - 1; i >= 0; i--) {
+        if (normalizeIssue(lotteryData[i].issue) === normalizedIssue) {
+            return lotteryData[i];
+        }
+    }
+
+    return null;
+}
+
+/**
+ * 规范化期号用于比较
+ * 去掉年份前缀，统一为纯数字期号
+ */
+function normalizeIssue(issue) {
+    if (!issue) return "";
+    // 去掉可能的格式字符
+    let cleaned = issue.replace(/[^0-9]/g, "");
+    // 如果超过5位，取后5位（大乐透期号格式）
+    if (cleaned.length > 5) {
+        cleaned = cleaned.slice(-5);
+    }
+    return cleaned;
 }
 
 /**
  * 比对中奖
  */
-function checkPrize(userFront, userBack, drawData, lotteryType) {
+function checkPrize(userFront, userBack, drawData, lotteryType, scannedIssue) {
     const config = LOTTERY_CONFIGS[lotteryType];
     const drawFront = drawData.front_nums;
     const drawBack = drawData.back_nums;
@@ -981,72 +1063,25 @@ function checkPrize(userFront, userBack, drawData, lotteryType) {
         prizeName: prizeResult.name,
         prizeAmount: prizeResult.amount,
         lotteryType: lotteryType
-    }, null);
-}
-
-/**
- * 双色球中奖规则
- * 一等奖: 6+1
- * 二等奖: 6+0
- * 三等奖: 5+1
- * 四等奖: 5+0 或 4+1
- * 五等奖: 4+0 或 3+1
- * 六等奖: 2+1 或 1+1 或 0+1
- */
-function checkSSQPrize(frontHit, backHit) {
-    if (frontHit === 6 && backHit === 1) return { level: 1, name: "一等奖", amount: "浮动奖金（最高1000万）" };
-    if (frontHit === 6 && backHit === 0) return { level: 2, name: "二等奖", amount: "浮动奖金" };
-    if (frontHit === 5 && backHit === 1) return { level: 3, name: "三等奖", amount: "3000元" };
-    if ((frontHit === 5 && backHit === 0) || (frontHit === 4 && backHit === 1))
-        return { level: 4, name: "四等奖", amount: "200元" };
-    if ((frontHit === 4 && backHit === 0) || (frontHit === 3 && backHit === 1))
-        return { level: 5, name: "五等奖", amount: "10元" };
-    if (backHit === 1 && frontHit >= 0 && frontHit <= 2)
-        return { level: 6, name: "六等奖", amount: "5元" };
-    return { level: 0, name: "未中奖", amount: "0元" };
-}
-
-/**
- * 大乐透中奖规则
- * 一等奖: 5+2
- * 二等奖: 5+1
- * 三等奖: 5+0
- * 四等奖: 4+2
- * 五等奖: 4+1
- * 六等奖: 3+2
- * 七等奖: 4+0
- * 八等奖: 3+1 或 2+2
- * 九等奖: 3+0 或 1+2 或 2+1 或 0+2
- */
-function checkDLTPrize(frontHit, backHit) {
-    if (frontHit === 5 && backHit === 2) return { level: 1, name: "一等奖", amount: "浮动奖金（最高1800万）" };
-    if (frontHit === 5 && backHit === 1) return { level: 2, name: "二等奖", amount: "浮动奖金" };
-    if (frontHit === 5 && backHit === 0) return { level: 3, name: "三等奖", amount: "10000元" };
-    if (frontHit === 4 && backHit === 2) return { level: 4, name: "四等奖", amount: "3000元" };
-    if (frontHit === 4 && backHit === 1) return { level: 5, name: "五等奖", amount: "300元" };
-    if (frontHit === 3 && backHit === 2) return { level: 6, name: "六等奖", amount: "200元" };
-    if (frontHit === 4 && backHit === 0) return { level: 7, name: "七等奖", amount: "100元" };
-    if ((frontHit === 3 && backHit === 1) || (frontHit === 2 && backHit === 2))
-        return { level: 8, name: "八等奖", amount: "15元" };
-    if ((frontHit === 3 && backHit === 0) || (frontHit === 1 && backHit === 2) ||
-        (frontHit === 2 && backHit === 1) || (frontHit === 0 && backHit === 2))
-        return { level: 9, name: "九等奖", amount: "5元" };
-    return { level: 0, name: "未中奖", amount: "0元" };
+    }, null, scannedIssue);
 }
 
 /**
  * 显示扫描结果
  */
-function showScanResult(userFront, userBack, prizeInfo, errorMsg) {
+function showScanResult(userFront, userBack, prizeInfo, errorMsg, scannedIssue) {
     const container = document.getElementById("scanner-result");
     if (!container) return;
+
+    const lt = prizeInfo ? prizeInfo.lotteryType : (scannedIssue ? currentLotteryType : currentLotteryType);
 
     if (errorMsg) {
         container.innerHTML = `<div class="prize-result no-prize">
             <div class="scan-numbers">
                 <span class="scan-label">扫描号码：</span>
-                ${renderScanBalls(userFront, userBack)}
+                ${renderScanBalls(userFront, userBack, lt)}
             </div>
+            ${scannedIssue ? `<div class="scan-issue">期号：${scannedIssue}期</div>` : ""}
             <div class="error-msg">${errorMsg}</div>
         </div>`;
         return;
@@ -1056,15 +1091,29 @@ function showScanResult(userFront, userBack, prizeInfo, errorMsg) {
     const isWin = prizeInfo.prizeLevel > 0;
     const prizeClass = isWin ? `prize-level-${prizeInfo.prizeLevel}` : "no-prize";
 
+    // 期号匹配状态
+    let issueMatchNote = "";
+    if (scannedIssue) {
+        const normalizedScanned = normalizeIssue(scannedIssue);
+        const normalizedDraw = normalizeIssue(prizeInfo.issue);
+        if (normalizedScanned === normalizedDraw) {
+            issueMatchNote = `<div class="scan-issue-match" style="color:#4CAF50;font-size:12px;margin-top:4px;">✅ 期号匹配成功：${prizeInfo.issue}期</div>`;
+        } else {
+            issueMatchNote = `<div class="scan-issue-match" style="color:#FF9800;font-size:12px;margin-top:4px;">⚠️ 未找到期号 ${scannedIssue} 的开奖数据，已使用最新期 ${prizeInfo.issue} 比对</div>`;
+        }
+    }
+
     container.innerHTML = `
         <div class="prize-result ${prizeClass}">
             <div class="scan-numbers">
                 <span class="scan-label">您的号码：</span>
-                ${renderScanBalls(userFront, userBack)}
+                ${renderScanBalls(userFront, userBack, prizeInfo.lotteryType)}
             </div>
+            ${scannedIssue ? `<div class="scan-issue">扫描期号：${scannedIssue}期</div>` : ""}
+            ${issueMatchNote}
             <div class="draw-numbers">
                 <span class="scan-label">开奖号码（${prizeInfo.issue}期 ${prizeInfo.date}）：</span>
-                ${renderScanBalls(prizeInfo.drawFront, prizeInfo.drawBack)}
+                ${renderScanBalls(prizeInfo.drawFront, prizeInfo.drawBack, prizeInfo.lotteryType)}
             </div>
             <div class="hit-info">
                 <span class="scan-label">命中：</span>
@@ -1076,16 +1125,20 @@ function showScanResult(userFront, userBack, prizeInfo, errorMsg) {
                 ${isWin ? '🎉 ' + prizeInfo.prizeName : '😔 ' + prizeInfo.prizeName}
             </div>
             ${isWin ? `<div class="prize-amount">💰 ${prizeInfo.prizeAmount}</div>` : ""}
-            <button class="btn btn-outline" onclick="startScan()" style="margin-top:12px;">📷 再次扫描</button>
+            <div class="btn-group" style="margin-top:12px;">
+                <button class="btn btn-outline" onclick="startScanDLT()">📷 扫描大乐透</button>
+                <button class="btn btn-outline" onclick="startScanSSQ()">📷 扫描双色球</button>
+            </div>
         </div>`;
 }
 
 /**
  * 渲染扫描号码球
  */
-function renderScanBalls(front, back) {
-    const frontClass = currentLotteryType === "ssq" ? "ball-front" : "ball-front";
-    const backClass = currentLotteryType === "ssq" ? "ball-back" : "ball-back";
+function renderScanBalls(front, back, lotteryType) {
+    const lt = lotteryType || currentLotteryType;
+    const frontClass = lt === "ssq" ? "ball-front" : "ball-front";
+    const backClass = lt === "ssq" ? "ball-back" : "ball-back";
     const frontBalls = front.map(n => `<span class="ball ${frontClass}">${String(n).padStart(2, '0')}</span>`).join("");
     const backBalls = back.map(n => `<span class="ball ${backClass}">${String(n).padStart(2, '0')}</span>`).join("");
     return `${frontBalls} <span class="ball-separator">+</span> ${backBalls}`;
@@ -1094,19 +1147,23 @@ function renderScanBalls(front, back) {
 /**
  * 手动输入模式（调试/回退用）
  */
-function showManualInput() {
+function showManualInput(lotteryType) {
     const container = document.getElementById("scanner-result");
     if (!container) return;
 
-    const config = LOTTERY_CONFIGS[currentLotteryType];
+    const lt = lotteryType || currentLotteryType;
+    const config = LOTTERY_CONFIGS[lt];
+    const typeLabel = config.name;
+
     container.innerHTML = `
         <div class="manual-input" style="margin-top:16px;padding:16px;background:#f8f9fa;border-radius:8px;">
-            <p style="font-size:13px;color:#666;margin-bottom:8px;">手动输入模式（请逐行输入号码，每行一个，用空格或逗号分隔）</p>
+            <p style="font-size:13px;color:#666;margin-bottom:8px;">${typeLabel}手动输入模式（请逐行输入号码，每行一个，用空格或逗号分隔）</p>
             <textarea id="manual-numbers" rows="3" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:16px;text-align:center;"
                 placeholder="例如：${config.front_name}号码在前，${config.back_name}号码在后&#10;01 02 03 04 05 + 06 07"></textarea>
             <div style="margin-top:8px;display:flex;gap:8px;">
-                <button class="btn btn-primary" onclick="processManualInput()" style="flex:1;">确认比对</button>
-                <button class="btn btn-outline" onclick="startScan()" style="flex:1;">重试扫描</button>
+                <button class="btn btn-primary" onclick="processManualInput('${lt}')" style="flex:1;">确认比对</button>
+                <button class="btn btn-outline" onclick="startScanDLT()" style="flex:1;">扫描大乐透</button>
+                <button class="btn btn-outline" onclick="startScanSSQ()" style="flex:1;">扫描双色球</button>
             </div>
         </div>`;
 }
@@ -1114,7 +1171,7 @@ function showManualInput() {
 /**
  * 处理手动输入
  */
-function processManualInput() {
+function processManualInput(lotteryType) {
     const textarea = document.getElementById("manual-numbers");
     if (!textarea) return;
 
@@ -1124,104 +1181,19 @@ function processManualInput() {
         return;
     }
 
-    // 使用 ScannerActivity 中的解析逻辑（JS 版本）
-    const parsed = parseNumbersFromText(rawText, currentLotteryType);
+    const lt = lotteryType || currentLotteryType;
+
+    const parsed = parseNumbersFromText(rawText, lt);
     if (!parsed) {
         showToast("无法识别号码格式，请检查输入", "error");
         return;
     }
 
     if (lotteryData.length === 0) {
-        showScanResult(parsed.front, parsed.back, null, "暂无开奖数据，请先获取最新开奖号码");
+        showScanResult(parsed.front, parsed.back, null, "暂无开奖数据，请先获取最新开奖号码", lt);
         return;
     }
 
     const latestDraw = lotteryData[lotteryData.length - 1];
-    checkPrize(parsed.front, parsed.back, latestDraw, currentLotteryType);
-}
-
-/**
- * JS 版号码解析（与 ScannerActivity.parseLotteryNumbers 逻辑一致）
- */
-function parseNumbersFromText(text, lotteryType) {
-    const cleaned = text.replace(/[Oo]/g, "0").replace(/[lI|]/g, "1")
-        .replace(/[Zz]/g, "2").replace(/[BS]/g, "8").replace(/[b]/g, "6")
-        .replace(/[gq]/g, "9").replace(/[T]/g, "7")
-        .replace(/\s+/g, " ").replace(/[；;：:。，,\-—]/g, " ")
-        .trim();
-
-    const frontCount = lotteryType === "ssq" ? 6 : 5;
-    const backCount = lotteryType === "ssq" ? 1 : 2;
-    const frontMax = lotteryType === "ssq" ? 33 : 35;
-    const backMax = lotteryType === "ssq" ? 16 : 12;
-
-    let allNumbers = [];
-    const m2 = cleaned.match(/\b\d{2}\b/g);
-    if (m2 && m2.length >= frontCount + backCount) {
-        allNumbers = m2;
-    } else {
-        const m1 = cleaned.match(/\b\d{1,2}\b/g);
-        if (m1) {
-            allNumbers = m1.map(n => n.length === 1 ? "0" + n : n);
-        }
-    }
-
-    if (allNumbers.length < frontCount + backCount) return null;
-
-    // 寻找分隔符
-    let splitIndex = frontCount;
-    const full = allNumbers.join(" ");
-    const splitMatch = full.match(/\d{2}\s+[+|｜]\s+\d{2}/);
-    if (splitMatch) {
-        const before = full.substring(0, splitMatch.index + 2);
-        splitIndex = before.split(/\s+/).length;
-    }
-
-    const front = [];
-    const back = [];
-    const frontSet = new Set();
-    const backSet = new Set();
-
-    for (let i = 0; i < allNumbers.length; i++) {
-        const num = parseInt(allNumbers[i]);
-        if (isNaN(num)) continue;
-        if (i < splitIndex) {
-            if (num >= 1 && num <= frontMax && !frontSet.has(num)) {
-                front.push(num);
-                frontSet.add(num);
-            }
-        } else {
-            if (num >= 1 && num <= backMax && !backSet.has(num)) {
-                back.push(num);
-                backSet.add(num);
-            }
-        }
-    }
-
-    // 如果数量不对，重新分配
-    if (front.length !== frontCount || back.length !== backCount) {
-        front.length = 0;
-        back.length = 0;
-        frontSet.clear();
-        backSet.clear();
-        for (const ns of allNumbers) {
-            const num = parseInt(ns);
-            if (isNaN(num)) continue;
-            if (num >= 1 && num <= frontMax && front.length < frontCount && !frontSet.has(num)) {
-                front.push(num);
-                frontSet.add(num);
-            } else if (num >= 1 && num <= backMax && back.length < backCount && !backSet.has(num)) {
-                back.push(num);
-                backSet.add(num);
-            }
-        }
-    }
-
-    front.sort((a, b) => a - b);
-    back.sort((a, b) => a - b);
-
-    if (front.length === frontCount && back.length === backCount) {
-        return { front, back };
-    }
-    return null;
+    checkPrize(parsed.front, parsed.back, latestDraw, lt, null);
 }

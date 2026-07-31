@@ -106,8 +106,9 @@ public class MainActivity extends AppCompatActivity {
                         int[] frontNums = data.getIntArrayExtra("front_nums");
                         int[] backNums = data.getIntArrayExtra("back_nums");
                         String lotteryType = data.getStringExtra("lottery_type");
+                        String issue = data.getStringExtra("issue");
                         if (frontNums != null && backNums != null && lotteryType != null) {
-                            onScanResult(frontNums, backNums, lotteryType);
+                            onScanResult(frontNums, backNums, lotteryType, issue);
                         }
                     }
                 });
@@ -128,7 +129,7 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 处理扫描结果，回调给 JavaScript
      */
-    private void onScanResult(int[] frontNums, int[] backNums, String lotteryType) {
+    private void onScanResult(int[] frontNums, int[] backNums, String lotteryType, String issue) {
         StringBuilder js = new StringBuilder("onScannerResult({");
         js.append("front_nums: [");
         for (int i = 0; i < frontNums.length; i++) {
@@ -140,7 +141,11 @@ public class MainActivity extends AppCompatActivity {
             if (i > 0) js.append(",");
             js.append(backNums[i]);
         }
-        js.append("], lottery_type: '").append(lotteryType).append("'})");
+        js.append("], lottery_type: '").append(lotteryType).append("'");
+        if (issue != null && !issue.isEmpty()) {
+            js.append(", issue: '").append(issue).append("'");
+        }
+        js.append("})");
         webView.post(() -> webView.evaluateJavascript(js.toString(), null));
     }
 

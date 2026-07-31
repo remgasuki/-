@@ -132,9 +132,10 @@
     <div class="tab-panel" id="tab-scanner">
         <div class="card">
             <div class="card-title">📷 彩票扫描验奖</div>
-            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">使用摄像头扫描纸质彩票上的号码，自动与最新开奖数据比对</p>
+            <p style="margin-bottom:12px;color:var(--text-secondary);font-size:13px;">使用摄像头扫描纸质彩票上的号码和期号，自动与对应期号的开奖数据比对</p>
             <div class="btn-group">
-                <button class="btn btn-primary" onclick="startScan()">📷 开始扫描</button>
+                <button class="btn btn-primary" onclick="startScanDLT()">📷 扫描大乐透</button>
+                <button class="btn btn-primary" onclick="startScanSSQ()">📷 扫描双色球</button>
             </div>
             <div id="scanner-result"></div>
         </div>
