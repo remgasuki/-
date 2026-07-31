@@ -10,6 +10,7 @@ import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -18,6 +19,12 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
+import java.util.Scanner;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -67,6 +74,21 @@ public class MainActivity extends AppCompatActivity {
             public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
                 // 忽略 SSL 证书错误，确保 API 请求（如 sporttery.cn）能正常访问
                 handler.proceed();
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                String url = request.getUrl().toString();
+                // 拦截大乐透 API 请求，用原生 HTTP 客户端替代 WebView fetch
+                // 解决 WebView 访问 sporttery.cn 返回 HTTP 567 的问题
+                if (url.contains("webapi.sporttery.cn") && url.contains("getHistoryPageListV1")) {
+                    try {
+                        return nativeFetch(url);
+                    } catch (Exception e) {
+                        return null; // 回退到 WebView 默认处理
+                    }
+                }
+                return super.shouldInterceptRequest(view, request);
             }
         });
 
@@ -129,6 +151,49 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(MainActivity.this, ScannerActivity.class);
         intent.putExtra("lottery_type", lotteryType);
         scannerLauncher.launch(intent);
+    }
+
+    /**
+     * 使用原生 HTTP 客户端请求 API，绕过 WebView 的 fetch 限制
+     * 解决 sporttery.cn 在 WebView 中返回 HTTP 567 的问题
+     */
+    private WebResourceResponse nativeFetch(String urlString) throws Exception {
+        URL url = new URL(urlString);
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+        conn.setRequestProperty("Accept", "application/json");
+        conn.setRequestProperty("Referer", "https://static.sporttery.cn/");
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(15000);
+        conn.setInstanceFollowRedirects(true);
+
+        int responseCode = conn.getResponseCode();
+        if (responseCode != HttpURLConnection.HTTP_OK) {
+            // 读取错误流
+            InputStream errorStream = conn.getErrorStream();
+            if (errorStream != null) {
+                Scanner s = new Scanner(errorStream, "UTF-8").useDelimiter("\\A");
+                String errorBody = s.hasNext() ? s.next() : "";
+                s.close();
+                errorStream.close();
+            }
+            conn.disconnect();
+            return null;
+        }
+
+        // 读取响应
+        InputStream inputStream = conn.getInputStream();
+        Scanner s = new Scanner(inputStream, "UTF-8").useDelimiter("\\A");
+        String responseBody = s.hasNext() ? s.next() : "";
+        s.close();
+        inputStream.close();
+        conn.disconnect();
+
+        // 返回 WebResourceResponse
+        ByteArrayInputStream dataStream = new ByteArrayInputStream(
+                responseBody.getBytes(StandardCharsets.UTF_8));
+        return new WebResourceResponse("application/json", "UTF-8", dataStream);
     }
 
     /**

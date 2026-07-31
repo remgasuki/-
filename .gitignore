@@ -37,4 +37,4 @@ Thumbs.db
 
 # Environment
 .env
-.env.local
+.env.localbuild_windows/
