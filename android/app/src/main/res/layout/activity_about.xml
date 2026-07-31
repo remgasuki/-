@@ -63,7 +63,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="大乐透数据分析模型"
+                android:text="彩票分析"
                 android:textColor="#212121"
                 android:textSize="22sp"
                 android:textStyle="bold"

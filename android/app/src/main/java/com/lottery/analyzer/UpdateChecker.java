@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.Looper;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
@@ -39,11 +40,31 @@ public class UpdateChecker {
     }
 
     /**
+     * 更新信息数据类
+     */
+    public static class UpdateInfo {
+        public final String versionName;
+        public final String releaseUrl;
+        public final String releaseNotes;
+        public final String downloadUrl;
+        public final String assetName;
+
+        public UpdateInfo(String versionName, String releaseUrl, String releaseNotes,
+                          String downloadUrl, String assetName) {
+            this.versionName = versionName;
+            this.releaseUrl = releaseUrl;
+            this.releaseNotes = releaseNotes;
+            this.downloadUrl = downloadUrl;
+            this.assetName = assetName;
+        }
+    }
+
+    /**
      * 检查更新回调接口
      */
     public interface UpdateCheckCallback {
         /** 发现新版本 */
-        void onNewVersion(String versionName, String releaseUrl, String releaseNotes);
+        void onNewVersion(UpdateInfo updateInfo);
         /** 已是最新版本 */
         void onLatestVersion();
         /** 网络请求失败 */
@@ -107,8 +128,25 @@ public class UpdateChecker {
 
                     // 比较版本号
                     if (compareVersions(latestVersion, currentVersion) > 0) {
-                        mainHandler.post(() ->
-                                callback.onNewVersion("v" + latestVersion, htmlUrl, body));
+                        // 提取 APK 下载链接
+                        String downloadUrl = null;
+                        String assetName = null;
+                        JSONArray assets = release.optJSONArray("assets");
+                        if (assets != null) {
+                            for (int i = 0; i < assets.length(); i++) {
+                                JSONObject asset = assets.getJSONObject(i);
+                                String name = asset.optString("name", "");
+                                if (name.endsWith(".apk")) {
+                                    downloadUrl = asset.optString("browser_download_url", "");
+                                    assetName = name;
+                                    break;
+                                }
+                            }
+                        }
+
+                        UpdateInfo info = new UpdateInfo(
+                                "v" + latestVersion, htmlUrl, body, downloadUrl, assetName);
+                        mainHandler.post(() -> callback.onNewVersion(info));
                     } else {
                         mainHandler.post(callback::onLatestVersion);
                     }
