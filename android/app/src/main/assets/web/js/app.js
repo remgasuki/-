@@ -1207,3 +1207,129 @@ function processManualInput(lotteryType) {
     const latestDraw = lotteryData[lotteryData.length - 1];
     checkPrize(parsed.front, parsed.back, latestDraw, lt, null);
 }
+
+/**
+ * 双色球中奖规则
+ * 一等奖: 6+1 | 二等奖: 6+0 | 三等奖: 5+1
+ * 四等奖: 5+0 或 4+1 | 五等奖: 4+0 或 3+1
+ * 六等奖: 2+1 或 1+1 或 0+1
+ */
+function checkSSQPrize(frontHit, backHit) {
+    if (frontHit === 6 && backHit === 1) return { level: 1, name: "一等奖", amount: "浮动奖金（最高1000万）" };
+    if (frontHit === 6 && backHit === 0) return { level: 2, name: "二等奖", amount: "浮动奖金" };
+    if (frontHit === 5 && backHit === 1) return { level: 3, name: "三等奖", amount: "3000元" };
+    if ((frontHit === 5 && backHit === 0) || (frontHit === 4 && backHit === 1))
+        return { level: 4, name: "四等奖", amount: "200元" };
+    if ((frontHit === 4 && backHit === 0) || (frontHit === 3 && backHit === 1))
+        return { level: 5, name: "五等奖", amount: "10元" };
+    if (backHit === 1 && frontHit >= 0 && frontHit <= 2)
+        return { level: 6, name: "六等奖", amount: "5元" };
+    return { level: 0, name: "未中奖", amount: "0元" };
+}
+
+/**
+ * 大乐透中奖规则
+ * 一等奖: 5+2 | 二等奖: 5+1 | 三等奖: 5+0
+ * 四等奖: 4+2 | 五等奖: 4+1 | 六等奖: 3+2
+ * 七等奖: 4+0 | 八等奖: 3+1 或 2+2
+ * 九等奖: 3+0 或 1+2 或 2+1 或 0+2
+ */
+function checkDLTPrize(frontHit, backHit) {
+    if (frontHit === 5 && backHit === 2) return { level: 1, name: "一等奖", amount: "浮动奖金（最高1800万）" };
+    if (frontHit === 5 && backHit === 1) return { level: 2, name: "二等奖", amount: "浮动奖金" };
+    if (frontHit === 5 && backHit === 0) return { level: 3, name: "三等奖", amount: "10000元" };
+    if (frontHit === 4 && backHit === 2) return { level: 4, name: "四等奖", amount: "3000元" };
+    if (frontHit === 4 && backHit === 1) return { level: 5, name: "五等奖", amount: "300元" };
+    if (frontHit === 3 && backHit === 2) return { level: 6, name: "六等奖", amount: "200元" };
+    if (frontHit === 4 && backHit === 0) return { level: 7, name: "七等奖", amount: "100元" };
+    if ((frontHit === 3 && backHit === 1) || (frontHit === 2 && backHit === 2))
+        return { level: 8, name: "八等奖", amount: "15元" };
+    if ((frontHit === 3 && backHit === 0) || (frontHit === 1 && backHit === 2) ||
+        (frontHit === 2 && backHit === 1) || (frontHit === 0 && backHit === 2))
+        return { level: 9, name: "九等奖", amount: "5元" };
+    return { level: 0, name: "未中奖", amount: "0元" };
+}
+
+/**
+ * JS 版号码解析（与 ScannerActivity.parseLotteryNumbers 逻辑一致）
+ */
+function parseNumbersFromText(text, lotteryType) {
+    const cleaned = text.replace(/[Oo]/g, "0").replace(/[lI|]/g, "1")
+        .replace(/[Zz]/g, "2").replace(/[BS]/g, "8").replace(/[b]/g, "6")
+        .replace(/[gq]/g, "9").replace(/[T]/g, "7")
+        .replace(/\s+/g, " ").replace(/[；;：:。，,\-—]/g, " ")
+        .trim();
+
+    const frontCount = lotteryType === "ssq" ? 6 : 5;
+    const backCount = lotteryType === "ssq" ? 1 : 2;
+    const frontMax = lotteryType === "ssq" ? 33 : 35;
+    const backMax = lotteryType === "ssq" ? 16 : 12;
+
+    let allNumbers = [];
+    const m2 = cleaned.match(/\b\d{2}\b/g);
+    if (m2 && m2.length >= frontCount + backCount) {
+        allNumbers = m2;
+    } else {
+        const m1 = cleaned.match(/\b\d{1,2}\b/g);
+        if (m1) {
+            allNumbers = m1.map(n => n.length === 1 ? "0" + n : n);
+        }
+    }
+
+    if (allNumbers.length < frontCount + backCount) return null;
+
+    let splitIndex = frontCount;
+    const full = allNumbers.join(" ");
+    const splitMatch = full.match(/\d{2}\s+[+|｜]\s+\d{2}/);
+    if (splitMatch) {
+        const before = full.substring(0, splitMatch.index + 2);
+        splitIndex = before.split(/\s+/).length;
+    }
+
+    const front = [];
+    const back = [];
+    const frontSet = new Set();
+    const backSet = new Set();
+
+    for (let i = 0; i < allNumbers.length; i++) {
+        const num = parseInt(allNumbers[i]);
+        if (isNaN(num)) continue;
+        if (i < splitIndex) {
+            if (num >= 1 && num <= frontMax && !frontSet.has(num)) {
+                front.push(num);
+                frontSet.add(num);
+            }
+        } else {
+            if (num >= 1 && num <= backMax && !backSet.has(num)) {
+                back.push(num);
+                backSet.add(num);
+            }
+        }
+    }
+
+    if (front.length !== frontCount || back.length !== backCount) {
+        front.length = 0;
+        back.length = 0;
+        frontSet.clear();
+        backSet.clear();
+        for (const ns of allNumbers) {
+            const num = parseInt(ns);
+            if (isNaN(num)) continue;
+            if (num >= 1 && num <= frontMax && front.length < frontCount && !frontSet.has(num)) {
+                front.push(num);
+                frontSet.add(num);
+            } else if (num >= 1 && num <= backMax && back.length < backCount && !backSet.has(num)) {
+                back.push(num);
+                backSet.add(num);
+            }
+        }
+    }
+
+    front.sort((a, b) => a - b);
+    back.sort((a, b) => a - b);
+
+    if (front.length === frontCount && back.length === backCount) {
+        return { front, back };
+    }
+    return null;
+}
