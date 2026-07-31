@@ -9,9 +9,15 @@ import webbrowser
 import threading
 
 # 确保 Windows 控制台输出使用 UTF-8 编码，防止中文乱码
+# 注意：PyInstaller 打包后 console=False 时，sys.stdout.buffer 为 None，需做兼容处理
 if sys.platform == "win32":
-    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    try:
+        if sys.stdout and sys.stdout.buffer:
+            sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+        if sys.stderr and sys.stderr.buffer:
+            sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass  # PyInstaller 无控制台模式，忽略
 from flask import Flask, jsonify, request, render_template, send_file
 
 from core.data_loader import DataLoader, LOTTERY_CONFIGS
