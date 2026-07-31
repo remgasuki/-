@@ -40,6 +40,13 @@ public class AboutActivity extends AppCompatActivity {
         currentVersionName = getAppVersionName();
         tvVersion.setText("v" + currentVersionName);
 
+        // 点击版本号跳转到安装包页面（GitHub Releases）
+        tvVersion.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_VIEW,
+                    Uri.parse("https://github.com/remgasuki/lottery-data-analyzer/releases"));
+            startActivity(intent);
+        });
+
         // 初始化版本检查器
         updateChecker = new UpdateChecker(this, currentVersionName);
 

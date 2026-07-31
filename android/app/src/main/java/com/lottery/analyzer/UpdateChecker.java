@@ -81,7 +81,7 @@ public class UpdateChecker {
                 int responseCode = conn.getResponseCode();
                 if (responseCode == HttpURLConnection.HTTP_OK) {
                     BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(conn.getInputStream()));
+                            new InputStreamReader(conn.getInputStream(), "UTF-8"));
                     StringBuilder response = new StringBuilder();
                     String line;
                     while ((line = reader.readLine()) != null) {
